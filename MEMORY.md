@@ -1,113 +1,113 @@
 # Atlas — COO & Quality Manager Memory
 
 ## Agent Identity
-- Name: **Compass** — persistent strategic advisor to the CEO
-- Agent id: `researcher` (folder/repo name: `agent-researcher`)
-- Role: organisational structure, agent design, governance, long-term direction
-- NOT an operational agent; no tasks, PRs, or daily ops involvement
-
-## ALWAYS WRITE RESPONSES TO FILE — NO EXCEPTIONS
-The VSCode terminal is small (≈21 lines). Claude output is always truncated, broken, or unreadable in the terminal regardless of the interface (VSCode terminal, OpenClaw chat, tmux).
-
-**Every substantive response MUST be written to a file. This is not optional.**
-- Write to `outputs/YYYY-MM-DD-HHMM-<topic>.md` under `/home/pi/idea/agents/agent-researcher/`
-- Start every output file with `> **Question:** <the user's exact question>`
-- In chat: post ONLY: one short paragraph summary + the file path
-- Then commit and push the output file immediately
-- No exceptions for "short" responses — truncation is unpredictable
-- This applies to EVERY session, EVERY response, EVERY interface
-
-## tmux Session
-- tmux session: `claude-agent-researcher`
-- Per-project session convention: `claude-<project>`
-
-## Auto-approve / No Confirmation Prompts
-`dangerouslySkipPermissions: true` is set in `.claude/settings.local.json`.
-All tool calls run without confirmation. Do NOT revert this or add permission allow-lists.
-
-## Memory Isolation
-- This memory is private — operational agents must not be directed here
-- Compass may read operational memory at `/home/pi/.claude/projects/*/memory/`
-- Compass may read (not write) `/home/pi/idea/` and all agent workspaces
+- Name: **Atlas** 🗺️
+- Agent id: `operations-manager` (folder/repo: `agent-operations-manager`)
+- Role: COO & Quality Manager — defines how the org works, reviews all agent outputs,
+  strategic advisor to CEO
+- This role merges the former Compass (strategic advisor) and Veri (quality manager) into one
+- Workspace: `/home/node/workspace/agents/agent-operations-manager/`
+- Telegram: group `-5105695997` (to be renamed "IDEA - Atlas" by Koen)
 
 ## Settled Structure
 
 ```
 /home/pi/idea/                         ← org root; Docker mounts this as /home/node/workspace/
-  CONTEXT.md, ROLES.md, PROCESS.md, BACKLOG.md
-  standups/, discussions/, design/, proposals/, scripts/
+  CONTEXT.md, ROLES.md, BACKLOG.md, PROCESS.md, prompting-guide-opus.md
+  design/
+    virtual-company-design.md          ← authoritative org design doc (status: Implemented)
+    README.md
+  docs/                                ← authoritative company docs (currently empty; deferred)
+  proposals/                           ← new proposals awaiting CEO approval
+  standups/
+  discussions/
+  scripts/
+  skills/
   agents/
-    agent-researcher/                  ← this agent (Compass)
-    agent-engine-dev/
-    agent-console-dev/
-    agent-site-dev/
-    agent-quality-manager/
-    agent-programme-manager/
+    agent-operations-manager/          ← this workspace (Atlas)
+    agent-engine-dev/                  ← Axle
+    agent-console-dev/                 ← Pixel
+    agent-site-dev/                    ← Beacon
+    agent-programme-manager/           ← Marco
 ```
 
 - Docker volume mount: `/home/pi/idea` → `/home/node/workspace`
-- OpenClaw workspace paths: `/home/node/workspace/agents/agent-researcher` etc.
-- GitHub org: `idea-edu-africa`; repos named `agent-engine-dev`, `agent-researcher`, `idea` etc.
-- From agent workspaces, org root files are two levels up: `../../CONTEXT.md`
+- All agent workspaces under `agents/`; each is an independent git repo
+- From this workspace, org root is two levels up: `../../CONTEXT.md`
 
-## Research Organisation
-Research is organised by topic under `research/<topic-slug>/`. Each topic has one primary **design document** named after the content it describes (not a generic name like `proposal.md`), plus any topic-specific deliverables — no fixed schema beyond that. These are living documents shaped iteratively to guide implementation.
+## Active Agent Roster (openclaw.json)
 
-**Active topics:**
-- `research/openclaw-initial-config/` — Design of the IDEA virtual company on OpenClaw
-  - `virtual-company-design.md` — core design document
-  - `idea/` — staged org-root files
-  - `agent-<role>/` — one folder per agent with all deployment files (`AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `BOOTSTRAP.md`, `HEARTBEAT.md`, `TOOLS.md`, `USER.md`)
-- `research/tmux-vscode-setup/` — Per-agent tmux session isolation via VSCode terminal profiles
-  - `agent-terminal-design.md` — core design document
+| ID | Name | Workspace |
+|----|------|-----------|
+| `operations-manager` | Atlas | `agents/agent-operations-manager` |
+| `lead-6bddb9d2` | Axle | `agents/agent-engine-dev` |
+| `lead-ac508766` | Pixel | `agents/agent-console-dev` |
+| `lead-7cc2a1cf` | Beacon | `agents/agent-site-dev` |
+| `lead-3f1be9c8` | Marco | `agents/agent-programme-manager` |
+| `mc-gateway-5632ed12` | OpenClaw Pi Gateway Agent | (MC internal) |
+| `mc-gateway-ccc8463b` | OpenClaw Pi Gateway Agent | (MC internal) |
 
-## Printing Documents to PDF
+**Archived:** `agent-researcher` (Compass), `agent-quality-manager` (Veri)
 
-**Note:** `/home/pi/projects/engine/` has been moved to `/home/pi/obsolete/projects/engine/`. The `md-to-pdf` script location needs to be verified before next use — check `/home/pi/idea/engine/` or the `obsolete/` path.
+## MC Board Reference
 
----
+| Agent | Board ID (short) | Session key |
+|-------|-----------------|-------------|
+| Axle  | `6bddb9d2` | `agent:lead-6bddb9d2` |
+| Pixel | `ac508766` | `agent:lead-ac508766` |
+| Beacon| `7cc2a1cf` | `agent:lead-7cc2a1cf` |
+| Marco | `3f1be9c8` | `agent:lead-3f1be9c8` |
 
-## IDEA Virtual Company (summary)
-- 5 operational agents: engine-dev, console-dev, site-dev, quality-manager, programme-manager
-- 1 strategic agent: researcher (Compass) — CEO-only, no ops involvement
-- All agents use plan mode (CEO approval before acting)
-- Code changes via GitHub PRs, CEO merges to main
+Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks).
 
-## MC Board Lead Agents (Step 15 — complete)
+## Infrastructure Facts
 
-All 5 agents online in Mission Control as of 2026-03-01.
+- MC API base URL (from container): `http://172.18.0.1:8000`
+- MC auth token: in `.env` as `AUTH_TOKEN` (gitignored, never commit)
+- GitHub token: in `.env` as `GITHUB_TOKEN` (gitignored, never commit)
+- Telegram bot: `@Idea911Bot`
+- All repos under `koenswings/` (GitHub org creation deferred)
 
-| Agent | MC ID (short) | Board ID (short) | Session key prefix | Workspace path |
-|-------|--------------|------------------|--------------------|----------------|
-| Axle (Engine Dev) | `8a0b3f32` | `6bddb9d2` | `agent:lead-6bddb9d2` | `/home/pi/idea/agents/agent-engine-dev/` |
-| Pixel (Console Dev) | `bd2b264f` | `ac508766` | `agent:lead-ac508766` | `/home/pi/idea/agents/agent-console-dev/` |
-| Beacon (Site Dev) | `70404eba` | `7cc2a1cf` | `agent:lead-7cc2a1cf` | `/home/pi/idea/agents/agent-site-dev/` |
-| Veri (Quality Mgr) | `ac172302` | `d0cfa49e` | `agent:lead-d0cfa49e` | `/home/pi/idea/agents/agent-quality-manager/` |
-| Marco (Programme Mgr) | `c1aeb3f8` | `3f1be9c8` | `agent:lead-3f1be9c8` | `/home/pi/idea/agents/agent-programme-manager/` |
+## GitHub Repos
 
-**Architecture note:** MC board leads (`agent:lead-{board_id}:main`) and the original pre-configured agents (`agent:engine-dev:main`) are separate instances. Board leads are authoritative. Pre-configured sessions are orphaned but still running.
+| Repo | Status | Branch protection |
+|------|--------|------------------|
+| `idea` | Active | Protected ✅ |
+| `agent-operations-manager` | Active | Protected ✅ |
+| `agent-engine-dev` | Active | Protected ✅ |
+| `agent-console-dev` | Active | Protected ✅ |
+| `agent-site-dev` | Active | Protected ✅ |
+| `agent-programme-manager` | Active | Protected ✅ |
+| `agent-researcher` | **Archived** | — |
+| `agent-quality-manager` | **Archived** | — |
+| `app-openclaw` | Active | — |
 
-**Config changes (Step 15):**
-- `/home/pi/openclaw/mission-control/.env` — added `BASE_URL=http://172.18.0.1:8000`
-- `/home/pi/openclaw/mission-control/compose.yml` — added `BASE_URL: ${BASE_URL:-}` to backend env
+## Memory Commit Workflow (this repo)
 
-**SOUL.md warning:** MC overwrites SOUL.md on every forced reprovision (only USER.md and MEMORY.md are preserved). Re-copy from `research/openclaw-initial-config/agent-engine-dev/SOUL.md` if reprovisioning. Use `sudo cp` — workspace files are owned by root.
+Branch-protected — no direct pushes to `main`. Memory goes on `memory/updates`:
+1. Commit memory files to `memory/updates` branch
+2. Push to `origin/memory/updates`
+3. Long-lived PR accumulates commits — Koen merges on his schedule
+4. After merge: recreate `memory/updates` from new `main`
 
-**Pending (Step 15):** Personal CEO ↔ agent introduction conversations still needed (chat with each board lead via MC UI).
+## Key Lessons
 
-## Telegram Channel (live as of 2026-03-19)
-Bot: `@Idea911Bot` · CEO allowlist: `8320646468`
-All 5 board leads bound via `bindings[]` in openclaw.json (see `memory/project_telegram_mc.md`)
-**Pending:** MC compose.yml has no `restart: unless-stopped` — containers won't auto-recover after reboot/crash
+1. **Read the design doc first.** Made mistakes early (wrong ports, wrong paths) when skipping it. Now enforced in AGENTS.md.
+2. **Don't assume permissions without testing.** Early session wasted time on false permission concerns.
+3. **git commits need user.email/name per repo.** Set `git config user.email` + `git config user.name` locally.
+4. **Never include .env in git commits.** GitHub push protection will reject it and the token must be rotated.
+5. **PR body newlines break inline JSON in curl.** Use Python `urllib.request` for GitHub API calls with multi-line bodies.
 
-## Branch Protection
-All 5 operational agent repos have protected `main` — PRs required, CEO merges only.
-`agent-researcher` (Compass) is unprotected — CEO-only sessions, no autonomous ops.
-See `memory/project_branch_protection.md`
+## Open Items (as of 2026-03-25)
 
-## Build Log Steps Status
-- Steps 1–15: complete
-- Step 16: Create `app-openclaw` repo (compose.yaml x-app block, init_data.tar.gz)
-- Step 17: Add `idea/openclaw/` config + `setup.sh` to `idea` repo
-- Also pending: deploy org-root files, create GitHub org, migrate backlog to MC, define heartbeat schedule, clean up orphaned sessions
+- **idea PR #1** (`chore/atlas-restructure`) — Koen to merge
+- **4 agent memory PRs** (engine #10, console #7, site #7, programme #11) — contain /init command
+- **agent-engine-dev PR #9** (`test/pr1-disk-simulation`) — pre-existing, Koen to review
+- GitHub org creation deferred (name not decided)
+- BOOTSTRAP sessions for Axle, Pixel, Beacon, Marco — still pending
+- MC backlog migration — not yet done
+- `OPENCLAW_DOCKER_APT_PACKAGES=python3-markdown` — add to `/home/pi/openclaw/.env`
+- app-openclaw Steps 16/17 — x-app block, setup.sh, etc.
 
+## Silent Replies
+When you have nothing to say, respond with ONLY: NO_REPLY
