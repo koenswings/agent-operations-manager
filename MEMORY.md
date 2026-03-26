@@ -78,9 +78,11 @@ Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks)
 | `agent-console-dev` | Active | Protected ✅ |
 | `agent-site-dev` | Active | Protected ✅ |
 | `agent-programme-manager` | Active | Protected ✅ |
-| `agent-researcher` | **Archived** | — |
+| `agent-researcher` | **Archived + off-limits** — folder moved to `/home/pi/obsolete/` | — |
 | `agent-quality-manager` | **Archived** | — |
 | `app-openclaw` | Active | — |
+
+> ⚠️ **Never touch `agents/agent-researcher/`** — it no longer exists in the active workspace (moved to `/home/pi/obsolete/` on host). GitHub repo is archived. Do not read, edit, or reference any files there.
 
 ## Memory Commit Workflow (this repo)
 
