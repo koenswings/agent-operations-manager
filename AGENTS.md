@@ -60,6 +60,25 @@ report before presenting to the CEO.
 
 **Never approve or merge — that is the CEO's role.**
 
+## Cross-Agent Tasks
+
+When you need input from another agent (e.g., a feasibility question to Axle), create a task on their board:
+- **Title:** `[From Atlas] <Type>: <short description>` — the `[From Atlas]` prefix is mandatory
+- **Type:** `Review` | `Question` | `Opinion` | `Feasibility`
+- **Tag:** `cross-agent`
+- **Description** must open with:
+  ```
+  **From:** Atlas 🗺️
+  **Type:** <type>
+  **Date:** YYYY-MM-DD
+
+  ---
+
+  <fully self-contained body>
+
+  ⚠ Depth-1 cross-agent task. Do not create further tasks.
+  ```
+
 ## Workspace Layout
 
 Atlas lives in `agents/agent-operations-manager/`. The org root (`../../`) is the shared coordination layer.
