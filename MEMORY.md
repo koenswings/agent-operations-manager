@@ -51,20 +51,19 @@
 
 ## MC Board Reference
 
-| Agent | Board ID (short) | Session key |
-|-------|-----------------|-------------|
-| Axle  | `6bddb9d2` | `agent:lead-6bddb9d2` |
-| Pixel | `ac508766` | `agent:lead-ac508766` |
-| Beacon| `7cc2a1cf` | `agent:lead-7cc2a1cf` |
-| Marco | `3f1be9c8` | `agent:lead-3f1be9c8` |
-
-Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks).
+| Agent | Board name | Board ID (short) | Session key |
+|-------|-----------|-----------------|-------------|
+| Atlas | Operations Manager | `d0cfa49e` | `agent:operations-manager` |
+| Axle  | Engine Dev | `6bddb9d2` | `agent:lead-6bddb9d2` |
+| Pixel | Console Dev | `ac508766` | `agent:lead-ac508766` |
+| Beacon| Site Dev | `7cc2a1cf` | `agent:lead-7cc2a1cf` |
+| Marco | Programme Manager | `3f1be9c8` | `agent:lead-3f1be9c8` |
 
 ## Infrastructure Facts
 
 - MC API base URL (from container): `http://mission-control-backend:8000` (Docker service name — preferred); `http://172.18.0.1:8000` (host bridge — still works, port published)
 - MC frontend: `https://openclaw-pi.tail2d60.ts.net:4000`
-- MC auth: `AUTH_MODE=local` with `MC_LOCAL_AUTH_TOKEN` in `platform/.env`. Each agent's `.env` stores a **per-agent token** as `AUTH_TOKEN` (not the shared platform token). Per-agent tokens authenticate to `/api/v1/agent/boards/{board_id}/tasks`. Atlas's board (Quality Manager) had a new token generated 2026-03-27; agent_token_hash updated in DB.
+- MC auth: `AUTH_MODE=local` with `MC_LOCAL_AUTH_TOKEN` in `platform/.env`. Each agent's `.env` stores a **per-agent token** as `AUTH_TOKEN` (not the shared platform token). Per-agent tokens authenticate to `/api/v1/agent/boards/{board_id}/tasks`. Atlas's board (Operations Manager, formerly "Quality Manager") had a new token generated 2026-03-27; agent_token_hash updated in DB.
 - Platform: unified compose at `/home/pi/idea/platform/compose.yaml`; 6 services on `idea-net`; migration completed 2026-03-27
 - GitHub token: in `.env` as `GITHUB_TOKEN` (gitignored, never commit)
 - Telegram bot: `@Idea911Bot`
