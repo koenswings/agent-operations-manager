@@ -62,8 +62,10 @@ Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks)
 
 ## Infrastructure Facts
 
-- MC API base URL (from container): `http://172.18.0.1:8000`
-- MC auth token: in `.env` as `AUTH_TOKEN` (gitignored, never commit)
+- MC API base URL (from container): `http://mission-control-backend:8000` (Docker service name — preferred); `http://172.18.0.1:8000` (host bridge — still works, port published)
+- MC frontend: `https://openclaw-pi.tail2d60.ts.net:4000`
+- MC auth: `AUTH_MODE=local`; all agents share one token from `platform/.env` → `MC_LOCAL_AUTH_TOKEN`; stored as `AUTH_TOKEN` in each agent `.env` (gitignored, never commit)
+- Platform: unified compose at `/home/pi/idea/platform/compose.yaml`; 6 services on `idea-net`; migration completed 2026-03-27
 - GitHub token: in `.env` as `GITHUB_TOKEN` (gitignored, never commit)
 - Telegram bot: `@Idea911Bot`
 - All repos under `koenswings/` (GitHub org creation deferred)
