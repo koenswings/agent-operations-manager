@@ -64,7 +64,7 @@ Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks)
 
 - MC API base URL (from container): `http://mission-control-backend:8000` (Docker service name — preferred); `http://172.18.0.1:8000` (host bridge — still works, port published)
 - MC frontend: `https://openclaw-pi.tail2d60.ts.net:4000`
-- MC auth: `AUTH_MODE=local`; all agents share one token from `platform/.env` → `MC_LOCAL_AUTH_TOKEN`; stored as `AUTH_TOKEN` in each agent `.env` (gitignored, never commit)
+- MC auth: `AUTH_MODE=local` with `MC_LOCAL_AUTH_TOKEN` in `platform/.env`. Each agent's `.env` stores a **per-agent token** as `AUTH_TOKEN` (not the shared platform token). Per-agent tokens authenticate to `/api/v1/agent/boards/{board_id}/tasks`. Atlas's board (Quality Manager) had a new token generated 2026-03-27; agent_token_hash updated in DB.
 - Platform: unified compose at `/home/pi/idea/platform/compose.yaml`; 6 services on `idea-net`; migration completed 2026-03-27
 - GitHub token: in `.env` as `GITHUB_TOKEN` (gitignored, never commit)
 - Telegram bot: `@Idea911Bot`
