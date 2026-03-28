@@ -112,5 +112,9 @@ Branch-protected — no direct pushes to `main`. Memory goes on `memory/updates`
 - `OPENCLAW_DOCKER_APT_PACKAGES=python3-markdown` — add to `/home/pi/openclaw/.env`
 - app-openclaw Steps 16/17 — x-app block, setup.sh, etc.
 
+## Communication Preferences
+
+- **No markdown tables in Telegram replies.** Koen uses the Mac desktop app — tables do not render well. Use bullet lists, plain text, or bold labels instead.
+
 ## Silent Replies
 When you have nothing to say, respond with ONLY: NO_REPLY
