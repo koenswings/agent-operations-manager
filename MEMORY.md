@@ -114,7 +114,7 @@ Branch-protected — no direct pushes to `main`. Memory goes on `memory/updates`
 
 ## Communication Preferences
 
-- **No raw markdown tables in Telegram replies.** Koen uses the Mac desktop app — they don't render well.
+- **No raw markdown tables or ASCII tables in Telegram replies.** Neither renders well — markdown tables don't render on Mac desktop; ASCII tables distort on iPhone 15 (too wide).
 - **For tables: render as PNG and send as image.** Use ImageMagick (`convert`) — available in the sandbox. Build the image with `-draw` primitives (rectangle + text). Save to `/tmp/`, send via `message` tool with `media=` pointing to the file. Confirmed working 2026-03-27.
 - **Use plain bullets/bold labels for simple lists** where the table is just a formatting choice. Reserve images for tables where layout genuinely adds clarity.
 
