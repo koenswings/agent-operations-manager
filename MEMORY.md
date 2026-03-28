@@ -114,7 +114,9 @@ Branch-protected — no direct pushes to `main`. Memory goes on `memory/updates`
 
 ## Communication Preferences
 
-- **No markdown tables in Telegram replies.** Koen uses the Mac desktop app — tables do not render well. Use bullet lists, plain text, or bold labels instead.
+- **No raw markdown tables in Telegram replies.** Koen uses the Mac desktop app — they don't render well.
+- **For tables: render as PNG and send as image.** Use ImageMagick (`convert`) — available in the sandbox. Build the image with `-draw` primitives (rectangle + text). Save to `/tmp/`, send via `message` tool with `media=` pointing to the file. Confirmed working 2026-03-27.
+- **Use plain bullets/bold labels for simple lists** where the table is just a formatting choice. Reserve images for tables where layout genuinely adds clarity.
 
 ## Silent Replies
 When you have nothing to say, respond with ONLY: NO_REPLY
