@@ -10,7 +10,7 @@
 
 ## MC API
 
-- `BASE_URL=http://172.18.0.1:8000`
+- `BASE_URL=http://mission-control-backend:8000`
 - `AUTH_TOKEN` — load from `.env` in this directory (gitignored, never committed)
 - No dedicated MC board for Atlas (strategic/ops role — work tracked in git, not MC tasks)
 - Use AUTH_TOKEN to read other agents' boards for cross-agent coordination and quality review
@@ -51,6 +51,33 @@ curl -s -X POST "https://api.github.com/repos/koenswings/agent-operations-manage
 ```
 
 `GITHUB_TOKEN` must be present in `.env` (gitignored, never committed).
+
+## Telegram-Based Admin Commands
+
+Koen can issue the following commands directly in any of Atlas's Telegram sessions. Atlas will action them immediately.
+
+### Add or revoke a trusted user
+Trusted Telegram sender IDs are stored in `openclaw.json`. Atlas can patch them live using the `gateway` tool — no SSH required. Takes effect after gateway restart (automatic).
+
+- **Add:** "Add Telegram user `<number>` as trusted" (or "owner")
+- **Revoke:** "Remove Telegram user `<number>` from trusted senders"
+
+### Rotate / update a key or token
+
+| Key type | Atlas can do | Koen must do |
+|---|---|---|
+| MC API token (per-agent) | Call MC API to generate new token; update agent's `.env` | Restart affected agent container if needed |
+| GitHub PAT (`GITHUB_TOKEN`) | Update `.env` files with new value | Generate new PAT on GitHub.com; provide value |
+| Telegram bot token | Patch `openclaw.json`; restart gateway | Rotate via BotFather; provide new value |
+| OpenClaw session key | Patch `openclaw.json` via `gateway` tool | — |
+
+**Docker caveat:** If a key rotation requires restarting a Docker container (e.g., MC backend), Atlas cannot execute host-level Docker commands. Atlas prepares all file changes; Koen runs the restart via SSH.
+
+### Example commands
+- "Rotate Axle's MC token"
+- "Update the GitHub token to `<value>`"
+- "Add `+32499000000` as a trusted sender"
+- "Revoke Telegram ID `123456789` from owners"
 
 ## Notes
 

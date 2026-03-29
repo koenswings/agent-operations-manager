@@ -2,8 +2,14 @@
 ## Per-Agent Session Isolation
 
 **Topic:** `tmux-vscode-setup`
-**Status:** Live — in use across IDEA agent workspaces
+**Status:** ~~Live~~ **Superseded** — 2026-03-26
 **Date:** 2026-03-20
+
+> **Superseded.** The VSCode-integrated tmux terminal profile pattern described here is no longer used.
+> Claude sessions are now started from a plain SSH remote terminal, with tmux used only for SSH session
+> persistence (keeping `claude` alive across disconnects). See the *Session persistence across SSH
+> disconnects* section in `idea/design/virtual-company-design.md` → CLAUDE.md chapter.
+> This document is retained as historical reference.
 
 ---
 

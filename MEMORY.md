@@ -51,19 +51,20 @@
 
 ## MC Board Reference
 
-| Agent | Board ID (short) | Session key |
-|-------|-----------------|-------------|
-| Axle  | `6bddb9d2` | `agent:lead-6bddb9d2` |
-| Pixel | `ac508766` | `agent:lead-ac508766` |
-| Beacon| `7cc2a1cf` | `agent:lead-7cc2a1cf` |
-| Marco | `3f1be9c8` | `agent:lead-3f1be9c8` |
-
-Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks).
+| Agent | Board name | Board ID (short) | Session key |
+|-------|-----------|-----------------|-------------|
+| Atlas | Operations Manager | `d0cfa49e` | `agent:operations-manager` |
+| Axle  | Engine Dev | `6bddb9d2` | `agent:lead-6bddb9d2` |
+| Pixel | Console Dev | `ac508766` | `agent:lead-ac508766` |
+| Beacon| Site Dev | `7cc2a1cf` | `agent:lead-7cc2a1cf` |
+| Marco | Programme Manager | `3f1be9c8` | `agent:lead-3f1be9c8` |
 
 ## Infrastructure Facts
 
-- MC API base URL (from container): `http://172.18.0.1:8000`
-- MC auth token: in `.env` as `AUTH_TOKEN` (gitignored, never commit)
+- MC API base URL (from container): `http://mission-control-backend:8000` (Docker service name — preferred); `http://172.18.0.1:8000` (host bridge — still works, port published)
+- MC frontend: `https://openclaw-pi.tail2d60.ts.net:4000`
+- MC auth: `AUTH_MODE=local` with `MC_LOCAL_AUTH_TOKEN` in `platform/.env`. Each agent's `.env` stores a **per-agent token** as `AUTH_TOKEN` (not the shared platform token). Per-agent tokens authenticate to `/api/v1/agent/boards/{board_id}/tasks`. Atlas's board (Operations Manager, formerly "Quality Manager") had a new token generated 2026-03-27; agent_token_hash updated in DB.
+- Platform: unified compose at `/home/pi/idea/platform/compose.yaml`; 6 services on `idea-net`; migration completed 2026-03-27
 - GitHub token: in `.env` as `GITHUB_TOKEN` (gitignored, never commit)
 - Telegram bot: `@Idea911Bot`
 - All repos under `koenswings/` (GitHub org creation deferred)
@@ -78,9 +79,11 @@ Atlas has no MC board (strategic/ops role — work tracked in git, not MC tasks)
 | `agent-console-dev` | Active | Protected ✅ |
 | `agent-site-dev` | Active | Protected ✅ |
 | `agent-programme-manager` | Active | Protected ✅ |
-| `agent-researcher` | **Archived** | — |
+| `agent-researcher` | **Archived + off-limits** — folder moved to `/home/pi/obsolete/` | — |
 | `agent-quality-manager` | **Archived** | — |
 | `app-openclaw` | Active | — |
+
+> ⚠️ **Never touch `agents/agent-researcher/`** — it no longer exists in the active workspace (moved to `/home/pi/obsolete/` on host). GitHub repo is archived. Do not read, edit, or reference any files there.
 
 ## Memory Commit Workflow (this repo)
 
@@ -108,6 +111,12 @@ Branch-protected — no direct pushes to `main`. Memory goes on `memory/updates`
 - MC backlog migration — not yet done
 - `OPENCLAW_DOCKER_APT_PACKAGES=python3-markdown` — add to `/home/pi/openclaw/.env`
 - app-openclaw Steps 16/17 — x-app block, setup.sh, etc.
+
+## Communication Preferences
+
+- **No raw markdown tables or ASCII tables in Telegram replies.** Neither renders well — markdown tables don't render on Mac desktop; ASCII tables distort on iPhone 15 (too wide).
+- **For tables: render as PNG and send as image.** Use ImageMagick (`convert`) — available in the sandbox. Build the image with `-draw` primitives (rectangle + text). Save to `/tmp/`, send via `message` tool with `media=` pointing to the file. Confirmed working 2026-03-27.
+- **Use plain bullets/bold labels for simple lists** where the table is just a formatting choice. Reserve images for tables where layout genuinely adds clarity.
 
 ## Silent Replies
 When you have nothing to say, respond with ONLY: NO_REPLY
