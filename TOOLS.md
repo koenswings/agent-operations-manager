@@ -79,6 +79,38 @@ Trusted Telegram sender IDs are stored in `openclaw.json`. Atlas can patch them 
 - "Add `+32499000000` as a trusted sender"
 - "Revoke Telegram ID `123456789` from owners"
 
+## Working in Other Agent Repos
+
+When making changes to another agent's `memory/updates` branch (or any branch other than
+their current working branch), **always use `git worktree`** — never `git stash + checkout`.
+
+Stashing interrupts the agent's live session by removing their uncommitted changes from the
+working directory. Worktree avoids this entirely: the agent's directory is never touched.
+
+### Procedure
+
+```bash
+AGENT_DIR="/home/node/workspace/agents/agent-engine-dev"
+WORKTREE="/tmp/agent-engine-dev-mem"
+
+# 1. Check for live work first — if clean, a normal checkout is fine
+git -C "$AGENT_DIR" status
+
+# 2. Add a temporary worktree for the target branch
+git -C "$AGENT_DIR" worktree add "$WORKTREE" memory/updates
+
+# 3. Do all file work inside the temp worktree
+cp some-file "$WORKTREE/"
+git -C "$WORKTREE" add . && git -C "$WORKTREE" commit -m "..."
+git -C "$WORKTREE" push origin memory/updates
+
+# 4. Remove the worktree — agent's main directory was never touched
+git -C "$AGENT_DIR" worktree remove "$WORKTREE"
+```
+
+**Rule:** if `git status` shows any uncommitted changes in an agent repo, use worktree.
+If the repo is clean, a normal checkout is acceptable but worktree is still preferred.
+
 ## Notes
 
 _(Add setup quirks, path changes, or environment-specific observations here as discovered.)_
