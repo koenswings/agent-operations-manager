@@ -101,6 +101,7 @@ Branch-protected — no direct pushes to `main`. Memory goes on `memory/updates`
 4. **Never include .env in git commits.** GitHub push protection will reject it and the token must be rotated.
 5. **PR body newlines break inline JSON in curl.** Use Python `urllib.request` for GitHub API calls with multi-line bodies.
 6. **Use `git worktree` when working in another agent's repo.** Never `git stash + checkout` — stashing removes uncommitted changes from the working directory and interrupts the agent's live session. Worktree checks out a branch into a temp directory; the agent's main directory is never touched. Always run `git status` first; use worktree if any uncommitted changes are present. Full procedure in TOOLS.md.
+7. **Never leave another agent's repo on a different branch than you found it.** An agent's next session starts on whatever branch the directory is on. If worktree is used this can't happen (the main directory is never touched). If checkout is used for any reason, always switch back before leaving — even if the working directory looks clean.
 
 ## Open Items (as of 2026-03-25)
 
