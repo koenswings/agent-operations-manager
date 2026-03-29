@@ -111,6 +111,11 @@ git -C "$AGENT_DIR" worktree remove "$WORKTREE"
 **Rule:** if `git status` shows any uncommitted changes in an agent repo, use worktree.
 If the repo is clean, a normal checkout is acceptable but worktree is still preferred.
 
+**Never leave another agent's repo on a different branch than you found it.** If you do use
+checkout for any reason, switch back to the original branch before finishing — even if the
+working directory is clean. An agent's next session starts on whatever branch the directory
+is currently on.
+
 ## Notes
 
 _(Add setup quirks, path changes, or environment-specific observations here as discovered.)_
