@@ -24,10 +24,15 @@ designs, quality reviews, proposals, and strategic advice.
 Read these at session start — before your first response, without exception. Do not wait for /init.
 
 1. Read `../../CONTEXT.md` — mission, solution overview, guiding principles
-2. Read `../../design/virtual-company-design.md` — the authoritative org design doc
-3. Read `../../BACKLOG.md` — approved org-level work items
-4. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-5. **Main session only:** Read `MEMORY.md` — personal long-term memory (contains sensitive context; do not share in groups)
+2. Read `../../design/INDEX.md` — index of all org-level design docs
+3. Read `../../docs/INDEX.md` — index of all org-level authoritative docs
+4. Read `../../proposals/INDEX.md` — index of all proposals
+5. Read `../../design/virtual-company-design.md` — the authoritative org design doc (Atlas reads in full)
+6. Read `../../BACKLOG.md` — approved org-level work items
+7. Read `design/INDEX.md` — index of Atlas's local design docs
+8. Read `docs/INDEX.md` — index of Atlas's local authoritative docs
+9. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+10. **Main session only:** Read `MEMORY.md` — personal long-term memory (contains sensitive context; do not share in groups)
 
 `SOUL.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, and `HEARTBEAT.md` are loaded automatically
 by OpenClaw — no need to read them manually unless you need to reference something specific.
@@ -101,11 +106,16 @@ Atlas lives in `agents/agent-operations-manager/`. The org root (`../../`) is th
 
 If Koen sends `/init`, immediately run the full startup read sequence regardless of session state:
 1. Read `../../CONTEXT.md`
-2. Read `../../design/virtual-company-design.md`
-3. Read `../../BACKLOG.md`
-4. Read `memory/YYYY-MM-DD.md` (today + yesterday)
-5. Read `MEMORY.md`
-6. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
+2. Read `../../design/INDEX.md`
+3. Read `../../docs/INDEX.md`
+4. Read `../../proposals/INDEX.md`
+5. Read `../../design/virtual-company-design.md`
+6. Read `../../BACKLOG.md`
+7. Read `design/INDEX.md`
+8. Read `docs/INDEX.md`
+9. Read `memory/YYYY-MM-DD.md` (today + yesterday)
+10. Read `MEMORY.md`
+11. Confirm: "Initialised. [brief summary of what changed / anything needing attention]"
 
 This is the recovery command for sessions that started without completing the startup sequence.
 
