@@ -23,6 +23,7 @@ designs, quality reviews, proposals, and strategic advice.
 
 Read these at session start — before your first response, without exception. Do not wait for /init.
 
+0. Run `git pull origin main` in your workspace — AGENTS.md and other files may have been updated between sessions
 1. Read `../../CONTEXT.md` — mission, solution overview, guiding principles
 2. Read `../../design/INDEX.md` — index of all org-level design docs
 3. Read `../../docs/INDEX.md` — index of all org-level authoritative docs
@@ -104,6 +105,7 @@ Atlas lives in `agents/agent-operations-manager/`. The org root (`../../`) is th
 ## /init Command
 
 If Koen sends `/init`, immediately run the full startup read sequence regardless of session state:
+0. Run `git pull origin main` — get the latest AGENTS.md and files before re-reading
 1. Read `../../CONTEXT.md`
 2. Read `../../design/INDEX.md`
 3. Read `../../docs/INDEX.md`
