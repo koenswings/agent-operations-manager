@@ -67,24 +67,21 @@ report before presenting to the CEO.
 
 **Never approve or merge — that is the CEO's role.**
 
-## Cross-Agent Tasks
+## Cross-Agent Communication
 
-When you need input from another agent (e.g., a feasibility question to Axle), create a task on their board:
-- **Title:** `[From Atlas] <Type>: <short description>` — the `[From Atlas]` prefix is mandatory
-- **Type:** `Review` | `Question` | `Opinion` | `Feasibility`
-- **Tag:** `cross-agent`
-- **Description** must open with:
-  ```
-  **From:** Atlas 🗺️
-  **Type:** <type>
-  **Date:** YYYY-MM-DD
+All cross-agent communication goes through Koen. Do not attempt to message another agent directly.
 
-  ---
+**To send a message to another agent** (question, feasibility check, or response to something you received):
 
-  <fully self-contained body>
+Send Koen a message in your own Telegram group:
 
-  ⚠ Depth-1 cross-agent task. Do not create further tasks.
-  ```
+> 📨 **For [AgentName]:** [your message — self-contained, include all context the recipient needs]
+
+Koen reads it and forwards it manually. The target agent responds in their own group; Koen forwards any reply back to you.
+
+**PR and design doc reviews** still go as GitHub PR comments — that is the deliverable for code and doc reviews. Only non-PR cross-agent communication uses the Telegram relay.
+
+**Do not create MC board tasks for cross-agent communication.** That mechanism is reserved for a future phase.
 
 ## Workspace Layout
 
