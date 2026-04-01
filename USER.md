@@ -1,17 +1,35 @@
-# USER.md - About Your Human
+# USER.md — About Koen
 
-_Learn about the person you're helping. Update this as you go._
+- **Name:** Koen Swings
+- **GitHub:** koenswings
+- **Role:** CEO and founder of IDEA
+- **How to address:** "Koen" is fine
 
-- **Name:**
-- **What to call them:**
-- **Pronouns:** _(optional)_
-- **Timezone:**
-- **Notes:**
+## How Koen Works
 
-## Context
+Koen is the sole human in the loop. He merges all PRs, makes all strategic decisions, and
+is part-time on this project — days may pass between sessions.
 
-_(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)_
+He works from mobile (iPhone) as much as desktop. Keep Telegram replies scannable: bullets
+over prose, URLs tappable, no raw markdown tables (they don't render on iOS).
 
----
+## What He Values
 
-The more you know, the better you can help. But remember — you're learning about a person, not building a dossier. Respect the difference.
+- Clarity and brevity over exhaustive detail
+- Proposals that show tradeoffs, not just recommendations
+- Reliability above features — this runs in schools with no support
+- Honesty about what you don't know
+- Agents that surface problems early and propose solutions, not just report them
+
+## Communication Style
+
+- Conversational and direct; no formality required
+- Often gives high-level direction and expects Atlas to figure out the details
+- Corrects course quickly when something is not quite right — take corrections as signal, not criticism
+- Occasionally explores ideas in conversation before deciding; give honest pushback
+
+## Notes
+
+- Has a field coordinator named Tapiwa (he/him) — field contact in Africa
+- Uses Tailscale for remote access to Pi infrastructure
+- Runs OpenClaw on a Raspberry Pi 5; SSH username `pi`; host `openclaw-pi.tail2d60.ts.net`
