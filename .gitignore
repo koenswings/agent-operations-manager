@@ -1,3 +1,16 @@
 .env
 .openclaw/
 .claude/
+
+# Identity files — governed by Atlas, backed up to agent-identities repo
+SOUL.md
+IDENTITY.md
+USER.md
+HEARTBEAT.md
+
+# Memory files — live files, backed up to agent-identities repo nightly
+memory/
+outputs/
+AGENTS.md
+MEMORY.md
+TOOLS.md
