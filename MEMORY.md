@@ -51,13 +51,13 @@
 
 ## MC Board Reference
 
-| Agent | Board name | Board ID (short) | Session key |
-|-------|-----------|-----------------|-------------|
-| Atlas | Operations Manager | `d0cfa49e` | `agent:operations-manager` |
-| Axle  | Engine Dev | `6bddb9d2` | `agent:lead-6bddb9d2` |
-| Pixel | Console Dev | `ac508766` | `agent:lead-ac508766` |
-| Beacon| Site Dev | `7cc2a1cf` | `agent:lead-7cc2a1cf` |
-| Marco | Programme Manager | `3f1be9c8` | `agent:lead-3f1be9c8` |
+| Agent | Board name | Board ID (full UUID) | Session key |
+|-------|-----------|---------------------|-------------|
+| Atlas | Operations Manager | `d0cfa49e-edcb-4a23-832b-c2ae2c99bf67` | `agent:operations-manager` |
+| Axle  | Engine Dev | `6bddb9d2-c06f-444d-8b18-b517aeaa6aa8` | `agent:lead-6bddb9d2` |
+| Pixel | Console Dev | `ac508766-e9e3-48a0-b6a5-54c6ffcdc1a3` | `agent:lead-ac508766` |
+| Beacon| Site Dev | `7cc2a1cf-fa22-485f-b842-bb22cb758257` | `agent:lead-7cc2a1cf` |
+| Marco | Programme Manager | `3f1be9c8-87e7-4a5d-9d3b-99756c35e3a9` | `agent:lead-3f1be9c8` |
 
 ## Infrastructure Facts
 
