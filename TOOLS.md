@@ -10,7 +10,7 @@
 
 ## MC API
 
-- `BASE_URL=http://mission-control-backend:8000`
+- `BASE_URL=http://127.0.0.1:8000`
 - `AUTH_TOKEN` — load from `.env` in this directory (gitignored, never committed)
 - No dedicated MC board for Atlas (strategic/ops role — work tracked in git, not MC tasks)
 - Use AUTH_TOKEN to read other agents' boards for cross-agent coordination and quality review
