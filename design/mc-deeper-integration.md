@@ -510,3 +510,305 @@ Regardless of route:
    IDs. Are these stable across gateway restarts, or does each
    session start generate a new ID? If unstable, the gateway session
    message approach needs a lookup step first.
+
+---
+
+## Part 5 — What the Authors Say: Channels, MC, Backup, and Installation
+
+A comparison between documented intent and our actual setup.
+Sources: OpenClaw docs (docs.openclaw.ai), MC docs (/home/pi/openclaw/mission-control/docs/),
+OpenClaw README (/home/pi/openclaw/README.md).
+
+---
+
+### 5.1 Chat channels and their role in MC
+
+**What the OpenClaw docs say:**
+
+OpenClaw's channel documentation describes Telegram as the fastest
+channel to set up — just a bot token, no QR or phone number — and
+as production-ready for both DMs and groups via the grammY library.
+The docs describe channels as independent of MC. MC is a separate
+layer on top — a control plane for boards, tasks, and approvals.
+The docs don't describe any native integration between Telegram
+messages and MC task management. They are presented as two distinct
+ways to interact with the gateway, not a unified surface.
+
+On group chats: the docs describe per-group session isolation
+(`session key: agent:<agentId>:telegram:group:<chatId>`). Each
+Telegram group gets its own session, separate from DMs. Commands
+like `/verbose on` sent in a group apply only to that group's
+session. This is exactly what IDEA relies on — each agent has its
+own group with an isolated session.
+
+On access control: the recommended pattern for a single-owner bot
+is `dmPolicy: "allowlist"` with your numeric user ID in `allowFrom`,
+plus target groups listed under `channels.telegram.groups`. The
+docs flag a subtle security boundary: DM pairing approval does not
+grant group access. Group sender auth is controlled separately via
+`groupAllowFrom` or the fallback `allowFrom`.
+
+On MC + channels: the MC docs describe MC as the "day-to-day
+operations surface" with gateway connections as a first-class
+feature. The ask-user endpoint routes questions to "the gateway
+main channel" — which is whatever channel the gateway is bound to
+(in our case Telegram). So the integration point the MC authors
+had in mind is ask-user → gateway main session → your Telegram.
+Nothing in the MC docs describes task state management via Telegram
+commands. That's a pattern we'd be building ourselves.
+
+**What we do:**
+
+We use exactly the recommended Telegram setup: bot token in
+`openclaw.json`, `dmPolicy: "allowlist"` with numeric sender IDs,
+one group per agent. This is textbook. The only non-standard element
+is that we use groups (one per agent) as the primary interface
+rather than DMs — the docs present DMs as the default interaction
+model and groups as an opt-in extension. Our approach is supported
+but not the primary path the docs describe.
+
+MC and Telegram are currently entirely separate in our setup, which
+aligns with how both tools are documented. The ask-user bridge is
+unused — all blocking questions happen through Telegram plan-mode,
+not routed through MC.
+
+**Gap:**
+
+There is a documented but unused integration path: agent → MC
+ask-user → gateway main → your Telegram. This is the author-intended
+bridge between MC and messaging channels, and we haven't wired it
+up. The MC docs also describe the `send_gateway_session_message`
+endpoint as requiring org-admin membership, which means it's
+intentionally gated — not something agents should call freely.
+
+---
+
+### 5.2 MC backup and state persistence
+
+**What the MC docs say:**
+
+The MC operations runbook (docs/operations/README.md) gives explicit
+backup instructions:
+
+> The DB runs in Postgres (Compose `db` service) and persists to
+> the `postgres_data` named volume.
+>
+> Example with `pg_dump` (run on the host):
+> ```bash
+> PGPASSWORD="$POSTGRES_PASSWORD" pg_dump \
+>   -h 127.0.0.1 -p "$POSTGRES_PORT" -U "$POSTGRES_USER" \
+>   -d "$POSTGRES_DB" --format=custom > mission_control.backup
+> ```
+
+The docs note this is a minimal backup and recommend automated
+backups with retention and periodic restore drills for real
+production.
+
+The docs also describe a token re-sync procedure for after reinstalls
+(`POST .../gateways/GATEWAY_ID/templates/sync?rotate_tokens=true`)
+in the gateway agent provisioning troubleshooting guide. This implies
+the authors expected reinstalls to happen and built a recovery path —
+but it assumes MC is still running and you're syncing tokens from
+MC back to the gateway. It does not cover the case where both MC
+and OpenClaw are wiped and rebuilt from scratch.
+
+**What we do:**
+
+We back up nothing in MC. The nightly backup cron copies agent
+identity and memory files from the filesystem to `agent-identities`
+on GitHub. The MC PostgreSQL database — which holds all boards,
+tasks, task comments, agent records, approvals, and the gateway
+configuration — is not backed up anywhere.
+
+This is a significant gap. If the Pi's SD card fails or we do a
+fresh `setup.sh` install, we lose:
+- All task history across all five boards
+- All task comments
+- All approval records
+- The gateway DB entry (URL, token, `disable_device_pairing`)
+- All agent registrations with their board IDs and session IDs
+- The `NEXT_PUBLIC_API_URL` and other env that was set manually
+
+The `setup.sh` script provisions new MC boards and agent tokens on
+fresh install, so the boards themselves would be recreated — but
+empty. Task history is permanently lost.
+
+**What we should do:**
+
+Add a `pg_dump` step to the nightly backup script alongside the
+identity file backup, writing a compressed dump to a known path
+that the `backup-agent-identities.sh` then pushes to GitHub (or
+a separate private repo). The dump is small — tasks and comments
+are text, not binary — and a daily snapshot is sufficient for IDEA's
+use pattern.
+
+A restore path should also be documented: `pg_restore` the dump
+after `setup.sh` brings up the stack, then re-run
+`templates/sync?rotate_tokens=true` to re-link gateway tokens.
+
+This should be treated as a P1 gap, not a future-phase item.
+
+---
+
+### 5.3 OpenClaw installation: docs vs. our approach
+
+**What the docs say:**
+
+The canonical install path is a one-liner:
+```bash
+curl -fsSL https://openclaw.ai/install.sh | bash
+```
+or `npm install -g openclaw@latest` followed by
+`openclaw onboard --install-daemon`.
+
+The onboarding wizard handles: model provider selection, API key,
+gateway config, channel setup, and systemd service install.
+The docs describe this as a ~5 minute process. Config lives at
+`~/.openclaw/openclaw.json`, which the gateway watches and hot-reloads
+on change. The docs offer a `openclaw configure` CLI wizard and a
+Control UI config form as alternatives to hand-editing JSON.
+
+For Telegram specifically: configure `botToken` in `openclaw.json`,
+start the gateway, then `openclaw pairing approve telegram <CODE>`
+for first-time DM access. No Docker involved. No proxy required.
+The docs present the native install as the standard path; Docker
+is documented as a container deployment option, not the default.
+
+**What we do:**
+
+We use `npm install -g openclaw@latest` (via `setup.sh`) — which
+matches one of the documented paths exactly. The config lives at
+`~/.openclaw/openclaw.json` and the systemd service is installed
+via `openclaw gateway install` — also exactly as documented.
+
+**Where we diverge:**
+
+1. **No onboarding wizard used.** We bypass `openclaw onboard` and
+   instead provision everything programmatically via `setup.sh`. The
+   wizard would configure the same things, but the script gives
+   reproducibility. This is a deliberate and reasonable deviation —
+   the wizard is for humans, `setup.sh` is for automation.
+
+2. **The old Docker-in-Docker era left residue.** The `README.md`
+   in `/home/pi/openclaw/` documents a Docker-based architecture
+   with a TCP proxy in `entrypoint.sh`, a Tailscale container, and
+   `openclaw.json` stored in a Docker volume. This was the original
+   IDEA setup before the native migration (April 2026). That
+   architecture is gone — OpenClaw now runs natively — but the
+   README still documents the old Docker approach. It's a stale
+   artefact, not the live configuration.
+
+3. **We manage `openclaw.json` as a template in git.** The docs
+   describe editing the live file directly and relying on hot-reload.
+   We maintain a scrubbed template in `platform/openclaw.json`
+   and write it to `~/.openclaw/openclaw.json` via `setup.sh`. This
+   is stricter than the docs prescribe — it means config changes
+   must go through `setup.sh` or be applied via the `gateway` tool,
+   not just hand-edited. Reasonable for a multi-agent setup, but
+   means the Control UI config editor and `openclaw configure` wizard
+   are effectively bypassed (any changes they make would be
+   overwritten on next `setup.sh` run).
+
+---
+
+### 5.4 MC installation: docs vs. our approach
+
+**What the docs say:**
+
+The canonical install path is the interactive installer:
+```bash
+curl -fsSL https://raw.githubusercontent.com/abhi1693/openclaw-mission-control/master/install.sh | bash
+```
+or `./install.sh` from a local clone.
+
+The installer is interactive, asks for deployment mode (Docker or
+local), installs missing dependencies, generates `.env`, and starts
+the stack. The docs call this "option A: one-command production-style
+bootstrap" and describe it as the recommended path.
+
+Alternatively, manual setup: `cp .env.example .env`, set
+`LOCAL_AUTH_TOKEN` (minimum 50 characters), then
+`docker compose -f compose.yml --env-file .env up -d --build`.
+
+The docs use `compose.yml` (hyphen) consistently. Frontend defaults
+to `localhost:3000`, backend to `localhost:8000`. `NEXT_PUBLIC_API_URL`
+defaults to `auto` which resolves to the current host — the docs call
+this out explicitly as needing an override behind a reverse proxy.
+
+**What we do:**
+
+We don't use the installer at all. `setup.sh` clones the MC repo,
+generates credentials, writes `platform/.env`, builds Docker images
+from source, and runs `docker compose -f compose.yaml`. This is
+closest to the manual setup path, but with several divergences:
+
+1. **We use `compose.yaml` (no hyphen).** The MC docs and repo
+   consistently use `compose.yml`. We renamed it in our fork to
+   match Docker Compose conventions. This is cosmetic but creates
+   drift from upstream — when reading MC docs, the file reference
+   won't match.
+
+2. **We build from source on every install.** The MC docs describe
+   a standard Compose workflow that uses pre-built images where
+   available. We always build from the local `mission-control/`
+   clone. This is slower and means our running version can drift
+   from upstream without it being obvious.
+
+3. **We added non-standard env vars and extra_hosts.** The `compose.yaml`
+   now includes `NEXT_PUBLIC_API_URL` pointing to the Tailscale
+   hostname, `extra_hosts` with a hardcoded Tailscale IP, and the
+   socat proxy service. None of these are in the upstream MC
+   reference config. They're necessary for our deployment topology
+   (Tailscale + Docker bridge) but they mean our compose file has
+   diverged significantly from upstream and will need manual review
+   on every MC upgrade.
+
+4. **We bypass the MC database backup.** The installer's `.env`
+   generates `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+   and `POSTGRES_PORT` — all referenced in the backup runbook. We
+   set `POSTGRES_DB` and `POSTGRES_PASSWORD` but the backup cron
+   that the MC docs describe is not wired up. The credentials exist;
+   the scheduled dump does not.
+
+5. **The gateway is connected via socat proxy, not directly.** The
+   MC docs assume the gateway is reachable at a normal URL. Our
+   architecture routes through `172.20.0.1:18790` via a socat
+   bridge because Tailscale Serve strips WebSocket query params.
+   This works but is a bespoke workaround that upstream MC does not
+   know about. It means upstream WS connection code changes could
+   break us silently.
+
+**Critical finding — MC auth token management:**
+
+The MC docs describe a token re-sync procedure
+(`templates/sync?rotate_tokens=true`) that MC uses to write
+`AUTH_TOKEN` into agent workspace files via gateway templates. This
+is the upstream-intended provisioning flow: MC is the authority on
+agent tokens; it pushes them to the gateway.
+
+We do the opposite: `setup.sh` generates tokens via direct DB
+write (PBKDF2) and writes them to each agent's `.env` manually.
+MC is not the authority on tokens in our setup — `setup.sh` is.
+This works but means the MC-native provisioning and template sync
+features don't apply to us. If we ever want to use gateway templates
+or agent lifecycle management from the MC UI, we'd need to reconcile
+the token authority model.
+
+---
+
+### 5.5 Summary of gaps
+
+| Area | Documented recommendation | Our current state | Risk |
+|------|--------------------------|-------------------|------|
+| MC state backup | Daily `pg_dump` | Not implemented | High — full task history lost on reinstall |
+| OpenClaw backup | `openclaw backup create` | Not implemented | Medium — identity files covered, sessions not |
+| MC token authority | MC provisions tokens via templates/sync | setup.sh writes directly to DB | Medium — MC lifecycle features unavailable |
+| MC ask-user bridge | Agent → MC → gateway main → Telegram | Unused | Low — plan-mode covers it today |
+| `openclaw.json` editing | Live edit + hot-reload or wizard | Template + setup.sh | Low — intentional, but bypasses Control UI |
+| `compose.yaml` drift | Minimal upstream config | Significant divergence | Medium — upgrade path needs manual review |
+| Old Docker README | N/A (upstream doesn't have this) | Stale docs in /home/pi/openclaw/ | Low — confusing but not operational |
+
+The highest-priority item — by significant margin — is the missing
+MC database backup. Everything else is either intentional or low
+risk. The DB backup should be added to `setup.sh` and the nightly
+cron before any further MC integration work.
