@@ -1,9 +1,21 @@
 # MC Deeper Integration — Design Exploration
 
-**Status:** Draft  
+**Status:** Closed — decision reached 2026-04-11  
 **Date:** 2026-04-09  
 **Author:** Atlas  
-**Type:** Exploratory — no decisions implied
+**Type:** Historical reference — kept for context, not for action
+
+---
+
+## ⚠️ Decision (2026-04-11)
+
+After reviewing this document, Koen decided: **we will not expand MC usage beyond what we do today.**
+
+MC continues as a task register — boards, task status, and agent health visibility. No further integration routes will be pursued.
+
+This document is preserved for historical reference. None of the routes (A, B, C) are planned. Do not use this as a basis for proposing MC feature work.
+
+---
 
 ---
 
