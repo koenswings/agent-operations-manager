@@ -179,14 +179,68 @@ Bottom line: the first build has a modest API cost for the docs layer. Every sub
 
 ## 5. Keeping the Graph Fresh
 
-```bash
-graphify hook install   # post-commit git hook in idea/ repo
+### 5.1 Rebuilding the graph: GitHub Actions (not local git hooks)
+
+IDEA's workflow is PR-based: all changes go via PR, Koen merges, main advances on GitHub. A local git hook (`graphify hook install`) fires on the committing machine — which is a dev machine, not the Pi, and not where the merge happens. The correct trigger is **GitHub Actions on push to main**.
+
+```yaml
+# idea/.github/workflows/graphify.yml
+name: Rebuild knowledge graph
+on:
+  push:
+    branches: [main]
+jobs:
+  graphify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install graphifyy
+      - run: graphify . --update --no-viz
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Commit updated graph
+        run: |
+          git config user.name "graphify-bot"
+          git config user.email "graphify@idea"
+          git add graphify-out/
+          git diff --staged --quiet || git commit -m "chore: rebuild knowledge graph [skip ci]"
+          git push
 ```
 
-Code changes → instant AST rebuild, no API cost.  
-Doc/image changes → hook notifies to run `graphify . --update`, which only reprocesses changed files.
+`[skip ci]` in the commit message prevents the workflow from triggering itself.
 
-The graph in `graphify-out/` is committed. Every agent pull gets the latest map.
+Code-only merges (TypeScript changes) complete in seconds — AST rebuild, no API cost. Doc changes trigger Pass 3 for only the changed files — one-time cost per changed doc.
+
+### 5.2 Getting the updated graph onto the Pi: cron pull
+
+Agents have no automatic awareness of GitHub events. Atlas does not monitor PRs from other agents. The right mechanism is a **periodic `git pull`** on the Pi — simple, reliable, no event plumbing needed.
+
+```bash
+# cron on Pi (pi user), every 30 minutes
+*/30 * * * * cd /home/pi/idea && git pull --quiet
+```
+
+Lag between a merge landing on GitHub and the Pi having the updated graph: up to 30 minutes. Acceptable for a knowledge graph that reflects architectural state.
+
+### 5.3 How agent sessions pick up the update
+
+This is where an important constraint applies: **OpenClaw sessions are long-running.** After disabling the nightly reboot, sessions can run for days or weeks. GRAPH_REPORT.md is injected at session start — meaning a long-running session will work from a snapshot that may be many merged PRs out of date.
+
+Session-start injection is therefore not sufficient on its own. The complementary mechanism is: **agents explicitly re-read GRAPH_REPORT.md at the start of significant work tasks.**
+
+This should be a standing instruction in each agent's AGENTS.md:
+
+```
+Before starting any cross-codebase task, read graphify-out/GRAPH_REPORT.md 
+from the idea/ root to get current architectural context.
+```
+
+This makes the graph pull deliberate and current, rather than relying on it being fresh from session start.
 
 ---
 
@@ -209,7 +263,7 @@ The graph in `graphify-out/` is committed. Every agent pull gets the latest map.
 
 **First build has a one-time API cost** for docs/markdown. Subsequent runs only reprocess changed files (SHA256 cache). Estimate: modest — the codebase is primarily TypeScript (free) and a handful of markdown docs.
 
-**Graph can go stale without the hook.** The post-commit hook mitigates this. Agents should treat the graph as advisory and verify against source for critical decisions.
+**Graph currency in long-running sessions.** Sessions can run for days or weeks without restarting. Session-start injection of GRAPH_REPORT.md is stale for any session that started before the last merge. Mitigated by agents explicitly re-reading the file at task start (see §5.3). The graph is structural context, not ground truth — agents should verify against source for critical decisions.
 
 **Build should run on a dev machine or CI, not the Pi.** The Python extraction CLI is compute-light but shouldn't run on the Pi during active sessions. Best practice: run `/graphify .` on a dev machine after significant changes, commit the output, let the Pi pull it. The git hook can also run on the dev machine.
 
@@ -233,19 +287,26 @@ The graph in `graphify-out/` is committed. Every agent pull gets the latest map.
 5. If useful: commit `graphify-out/` to a branch, open PR for review
 
 ### Phase 2 — Agent integration (Atlas)
-1. `graphify claw install` — writes GRAPH_REPORT.md directive into AGENTS.md for each agent repo
-2. Remove or trim ARCHITECTURE.md/CONTEXT.md code sections from session-start context (replaced by GRAPH_REPORT.md)
-3. Test: Axle session working on Engine asks about Console boundary → verify answer uses graph context
+1. `graphify claw install` — writes GRAPH_REPORT.md directive into AGENTS.md (do this in the idea root, covering all agents)
+2. Add explicit re-read instruction to each agent's AGENTS.md: read `graphify-out/GRAPH_REPORT.md` before starting cross-codebase tasks
+3. Remove or trim manually-maintained architecture sections from session-start context (ARCHITECTURE.md code sections, CONTEXT.md structural parts) — replaced by GRAPH_REPORT.md
+4. Test: Axle session asks about Console boundary without reading Console files → verify answer is grounded in graph
 
-### Phase 3 — Mac access (Atlas)
+### Phase 3 — Automation: GitHub Actions + Pi cron
+1. Add `.github/workflows/graphify.yml` to idea repo (see §5.1)
+2. Add `ANTHROPIC_API_KEY` to GitHub repo secrets
+3. Add cron entry on Pi: `*/30 * * * * cd /home/pi/idea && git pull --quiet`
+4. Add `graphify-out/manifest.json` and `graphify-out/cost.json` to `.gitignore`
+
+### Phase 4 — Mac access
 1. Add `graphify-serve.service` systemd unit on Pi (port 8083, serves `graphify-out/`)
 2. Enable and start: `systemctl --user enable --now graphify-serve`
 3. Koen pulls idea repo on Mac → opens `graphify-out/obsidian/` as Obsidian vault
 4. Verify both access points work over Tailscale
 
-### Phase 4 — Automation
-1. `graphify hook install` in idea repo → auto-rebuild on commit
-2. Add `graphify-out/manifest.json` and `graphify-out/cost.json` to `.gitignore`
+### Phase 5 — Consolidation
+1. Monitor first few graph rebuilds via Actions logs
+2. Evaluate whether GRAPH_REPORT.md meaningfully reduces file-read calls in agent sessions
 3. Document refresh workflow in `PROCESS.md`
 
 ---
