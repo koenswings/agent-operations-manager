@@ -190,7 +190,19 @@ Bottom line: the first build has a modest API cost for the docs layer. Every sub
 
 ### 5.1 Rebuilding the graph: GitHub Actions (not local git hooks)
 
-IDEA's workflow is PR-based: all changes go via PR, Koen merges, main advances on GitHub. A local git hook (`graphify hook install`) fires on the committing machine — which is a dev machine, not the Pi, and not where the merge happens. The correct trigger is **GitHub Actions on push to main**.
+IDEA's workflow is PR-based: all changes go via PR, Koen merges, main advances on GitHub. A local git hook (`graphify hook install`) fires on the committing machine — in IDEA's case that's a Pi running an Engine, not a Mac laptop. Running a graphify build (Pass 3 LLM extraction) on commit would hit the same Pi that's running an active Engine session, competing for RAM and API budget mid-session. That's the wrong place for it.
+
+GitHub Actions is the correct trigger: when a PR merges to main, **GitHub spins up a fresh Ubuntu VM in Microsoft's Azure cloud** — completely isolated from the Pi, your network, and whatever agents are doing. The VM installs graphify, builds the graph (API calls go directly from Azure to Anthropic), commits `graphify-out/` back to main, and is destroyed. The Pi is never involved in the build. The full flow:
+
+```
+Agent pushes branch on Pi → PR merged on GitHub
+  → GitHub launches Ubuntu VM (Azure cloud)
+  → VM: checkout repo, pip install graphifyy
+  → VM: /graphify . (Pass 3 API calls go Azure → Anthropic)
+  → VM: git commit graphify-out/ → push to main
+  → VM destroyed
+  → Pi (up to 30 min later): git pull → graph available
+```
 
 ```yaml
 # idea/.github/workflows/graphify.yml
@@ -225,14 +237,34 @@ jobs:
 
 Code-only merges (TypeScript changes) complete in seconds — AST rebuild, no API cost. Doc changes trigger Pass 3 for only the changed files — one-time cost per changed doc.
 
-### 5.2 Getting the updated graph onto the Pi: cron pull
+### 5.2 Getting the updated graph onto the Pi: isolated sparse clone + cron
 
-Agents have no automatic awareness of GitHub events. Atlas does not monitor PRs from other agents. The right mechanism is a **periodic `git pull`** on the Pi — simple, reliable, no event plumbing needed.
+The naïve approach — `cd /home/pi/idea && git pull` on cron — has a real conflict risk: agents work in the `/home/pi/idea` working directory (feature branches, staged changes, ongoing commits). A cron `git pull` hitting the same working tree while an agent is mid-operation can corrupt state or fail silently.
+
+**The fix: a dedicated read-only sparse clone just for the graph output.**
+
+This clone lives at a separate path (`/home/pi/graphify-cache`), tracks only `graphify-out/`, and is never touched by agent work:
 
 ```bash
-# cron on Pi (pi user), every 30 minutes
-*/30 * * * * cd /home/pi/idea && git pull --quiet
+# One-time setup on Pi (run once during Phase 3):
+git clone --no-checkout --depth 1 --filter=blob:none \
+  https://github.com/koenswings/idea.git /home/pi/graphify-cache
+cd /home/pi/graphify-cache
+git sparse-checkout set graphify-out/
+git checkout main
 ```
+
+```bash
+# cron on Pi (pi user), every 30 minutes:
+*/30 * * * * cd /home/pi/graphify-cache && git pull --quiet 2>>/home/pi/idea/logs/graphify-pull.log
+```
+
+Agents read from `/home/pi/graphify-cache/graphify-out/GRAPH_REPORT.md` — a path that is:
+- Never written by agents (agents never work in `/home/pi/graphify-cache`)
+- Only ever updated by the cron pull
+- Sparse — only downloads `graphify-out/`, not the full repo history
+
+No conflicts possible. The idea working directory and the graph cache are completely separate paths with no shared git state.
 
 Lag between a merge landing on GitHub and the Pi having the updated graph: up to 30 minutes. Acceptable for a knowledge graph that reflects architectural state.
 
@@ -245,8 +277,10 @@ Session-start injection is therefore not sufficient on its own. The complementar
 This should be a standing instruction in each agent's AGENTS.md:
 
 ```
-Before starting any cross-codebase task, read graphify-out/GRAPH_REPORT.md 
-from the idea/ root to get current architectural context.
+Before starting any cross-codebase task, read:
+  /home/pi/graphify-cache/graphify-out/GRAPH_REPORT.md
+This is the current knowledge graph of the full IDEA platform.
+Do not read this on every session start — only before cross-codebase work.
 ```
 
 This makes the graph pull deliberate and current, rather than relying on it being fresh from session start.
@@ -447,33 +481,45 @@ jobs:
 
 **Required:** Add `ANTHROPIC_API_KEY` to the `idea` repo's GitHub secrets (Settings → Secrets → Actions).
 
-#### 3b. Pi cron entry (pi user)
+#### 3b. Pi: isolated sparse clone + cron
 
-One line added to `pi` user's crontab:
+**Why not `git pull` on the idea working directory?**  
+Agents work in `/home/pi/idea` — creating branches, staging changes, mid-commit. A cron `git pull` on that same directory while an agent is operating is a real conflict risk: git file locking, HEAD drift, or silent failure. The fix is a **dedicated read-only sparse clone** that only contains `graphify-out/` and is never touched by agent work.
 
+**One-time setup on Pi (run once during Phase 3 rollout):**
+```bash
+git clone --no-checkout --depth 1 --filter=blob:none \
+  https://github.com/koenswings/idea.git /home/pi/graphify-cache
+cd /home/pi/graphify-cache
+git sparse-checkout set graphify-out/
+git checkout main
 ```
-# Pull updated graphify graph from idea repo every 30 minutes
-*/30 * * * * cd /home/pi/idea && git pull --quiet 2>/home/pi/idea/logs/graphify-pull.log
-```
 
-Add via: `crontab -e` as `pi` user.
+**Crontab entry** (add via `crontab -e` as `pi` user):
+```
+# Pull updated graphify graph into isolated cache every 30 minutes
+*/30 * * * * cd /home/pi/graphify-cache && git pull --quiet 2>>/home/pi/idea/logs/graphify-pull.log
+```
 
 **What changes on the Pi (complete list for Phase 3):**
 
 | Item | Location | Change |
 |------|----------|--------|
+| Sparse clone | `/home/pi/graphify-cache/` | New directory (contains only `graphify-out/`) |
 | Crontab entry | `pi` user crontab | +1 line |
 | Pull log | `/home/pi/idea/logs/graphify-pull.log` | New file (auto-created, append-only) |
 
-Nothing else. No new services. No new packages installed on the Pi. No config file changes. The `git pull` runs as the `pi` user under the existing `idea` directory — same as Koen would run manually.
+The `/home/pi/idea` working directory is **never touched** by this mechanism. No conflict with agent work possible.
 
 **Rollback Phase 3:**
 ```bash
-# On Pi: remove the crontab line
+# On Pi:
 crontab -e  # delete the graphify-pull line
+rm -rf /home/pi/graphify-cache
+rm /home/pi/idea/logs/graphify-pull.log  # optional
 
 # On GitHub: delete the workflow file via PR
-# Graph stays in repo at last committed state — not a problem
+# Graph stays in idea repo at last committed state — not a problem
 ```
 
 ---
@@ -495,7 +541,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -m http.server 8083 --directory /home/pi/idea/graphify-out
+ExecStart=/usr/bin/python3 -m http.server 8083 --directory /home/pi/graphify-cache/graphify-out
 Restart=on-failure
 RestartSec=10
 
@@ -570,10 +616,13 @@ Only do this after the graph has proved its value in practice.
 |-------|------|----------|------|----------|
 | 1 | None | — | — | — |
 | 2 | AGENTS.md additions | Each agent repo | +text block per agent | Remove lines via PR |
+| 3 | Sparse clone | `/home/pi/graphify-cache/` | New directory | `rm -rf /home/pi/graphify-cache` |
 | 3 | Crontab entry | `pi` user crontab | +1 line | `crontab -e`, delete line |
 | 3 | Pull log | `/home/pi/idea/logs/graphify-pull.log` | New log file | `rm` the file |
 | 4 | systemd unit | `~/.config/systemd/user/graphify-serve.service` | New file | `systemctl disable --now` + `rm` |
 | 4 | TCP port 8083 | Network | Open port | Closed automatically when service is stopped |
+
+**`/home/pi/idea` working directory: never touched by any of the above.**
 
 **No changes to:**
 - `~/.openclaw/openclaw.json`
@@ -597,8 +646,9 @@ systemctl --user disable --now graphify-serve
 rm ~/.config/systemd/user/graphify-serve.service
 systemctl --user daemon-reload
 
-# Pi: remove pull log (optional)
-rm /home/pi/idea/logs/graphify-pull.log
+# Pi: remove sparse clone and pull log
+rm -rf /home/pi/graphify-cache
+rm /home/pi/idea/logs/graphify-pull.log  # optional
 
 # GitHub: remove Actions workflow
 # → delete .github/workflows/graphify.yml via PR
