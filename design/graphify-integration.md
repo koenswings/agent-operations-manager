@@ -18,7 +18,7 @@ Output:
 - `graph.html` — interactive visual graph (click nodes, search, filter by community)
 - `obsidian/` — optional: ready-to-use Obsidian vault with backlinks (via `--obsidian` flag)
 
-**The core mechanism — compressed subgraph serving:** Graphify compresses the codebase into a structured graph that agents query instead of reading raw files. On platforms that support it (Claude Code, Codex), a PreToolUse hook fires before every file-read and serves a focused ~300-token subgraph. On OpenClaw specifically, the mechanism is session-start injection via AGENTS.md — GRAPH_REPORT.md is included at the top of every session. In both cases the agent navigates by graph structure rather than grepping through files.
+**The core mechanism — compressed subgraph serving:** Graphify compresses the codebase into a structured graph that agents query instead of reading raw files. On platforms that support it (Claude Code, Codex), a PreToolUse hook fires before every file-read and serves a focused ~300-token subgraph on demand. **OpenClaw does not support this hook.** For OpenClaw (and also Aider, Factory Droid, Trae), Graphify falls back to session-start injection via AGENTS.md — `GRAPH_REPORT.md` is included at the top of every session automatically via a directive written by `graphify claw install`. This is a meaningful capability difference: Claude Code agents navigate the graph dynamically mid-session; OpenClaw agents get structural context once at session start.
 
 **Graphify is a skill, not a standalone orchestrator.** The coding assistant (OpenClaw, Claude Code, Codex, etc.) is the runtime. Graphify dispatches extraction subagents in parallel, validates output against a schema, and merges it into the graph.
 
@@ -100,23 +100,32 @@ agents/*/.git/
 **/target/
 ```
 
-### 3.2 Hook only — no session-start index injection
+### 3.2 Session-start injection via AGENTS.md (OpenClaw's only mechanism)
 
-**Question:** Is there still a need to load the index into each agent once it has access to the graph? Weight against token economy.
+**Correction from earlier draft:** A previous version of this doc argued for "hook only" to save tokens. That was wrong — the PreToolUse hook is not available on OpenClaw at all. OpenClaw agents have exactly one mechanism: session-start injection via AGENTS.md.
 
-**Answer: No — the PreToolUse hook makes session-start injection redundant and wasteful.**
+**What `graphify claw install` does on OpenClaw:**  
+Writes a directive into AGENTS.md (at the project root) telling every OpenClaw agent to read `graphify-out/GRAPH_REPORT.md` at the start of each session. That's it. There is no mid-session hook, no dynamic subgraph serving, no on-demand query mechanism during normal operation.
 
-Here is what each mechanism does:
+**What this means in practice:**
 
-**`graphify claw install` (session-start injection):**
-Writes a config that tells OpenClaw to inject `GRAPH_REPORT.md` into agent context at the start of every session. That's ~500–1,000 tokens of overhead per session, regardless of whether the agent will do any graph-related work. On the Pi, this adds up.
+| Mechanism | Claude Code / Codex | OpenClaw (IDEA) |
+|-----------|--------------------|-----------------|
+| PreToolUse hook (mid-session, dynamic) | ✅ Available | ❌ Not available |
+| Session-start injection via AGENTS.md | Optional supplement | ✅ Only option |
+| MCP server (opt-in, deep sessions) | ✅ Available | ✅ Available |
 
-**PreToolUse hook:**
-Fires before every file-read call. The agent reads the graph map, identifies relevant nodes, and receives only the focused 300-token subgraph for that specific query. Zero overhead on sessions that don't touch the graph. Exact context for sessions that do.
+**The session-start model is still valuable — it's just different:**  
+Every agent starts every session with the structural map of the entire platform already in context. Conceptual queries ("how does sync work?"), architecture questions, cross-repo reasoning — all of these get the graph without the agent having to explicitly call for it. The limitation vs Claude Code is that the agent doesn't get a fresh focused subgraph on each tool call; it works from the session-start snapshot.
 
-**Verdict:** The hook is strictly better for token economy. Inject nothing at session start. Agents query the graph on demand via the hook. `GRAPH_REPORT.md` remains a valuable human document (for Koen to review the graph structure) but should not be auto-injected into every agent session.
+**Token cost of session-start injection:**  
+GRAPH_REPORT.md will be ~500–1,000 tokens. This is paid once per session (injected at the top, cached for subsequent turns). For sessions that do cross-codebase work, this cost pays for itself quickly. For short single-file sessions (e.g. a cron heartbeat), it's modest overhead. On balance, the structural benefit outweighs the overhead for IDEA's agent workloads.
 
-**Exception:** If an agent is starting a large cross-codebase refactor and explicitly wants orientation, it can read `GRAPH_REPORT.md` deliberately. That's the right time to read it — not as boilerplate on every session start.
+**Handling long-running sessions:**  
+Since nightly reboots are disabled on the Pi, agent sessions can run for days or weeks. GRAPH_REPORT.md is injected once at session start — meaning a long-running session works from a snapshot that may predate several merged PRs. Mitigation: agents should explicitly re-read `graphify-out/GRAPH_REPORT.md` at the start of any significant cross-codebase task. This is a standing instruction added to each agent's AGENTS.md (see §8, Phase 2).
+
+**MCP server (optional, for deep work sessions):**  
+Graphify ships an MCP server that exposes the full `graph.json` as queryable tools. This is available to OpenClaw agents as an opt-in for sessions that need dynamic subgraph queries — e.g. a deep refactor session where an agent wants to ask "what are all the callers of this function across both repos?" The MCP server is not part of the base integration; it's an upgrade path if the session-start model proves insufficient.
 
 ### 3.3 Accessing the graph from a remote Mac
 
@@ -271,7 +280,7 @@ This makes the graph pull deliberate and current, rather than relying on it bein
 
 **Sequential processing on OpenClaw.** Unlike Claude Code (parallel subagents for Pass 3), OpenClaw processes docs sequentially during graph building. First build on a large doc corpus will be slower. Subsequent incremental builds are unaffected.
 
-**No PreToolUse hook on OpenClaw.** The mid-session hook mechanism (serving ~300-token subgraphs on demand) is only available on Claude Code and Codex. On OpenClaw, the only mechanism is session-start injection via AGENTS.md. This is a real limitation relative to Claude Code users, but GRAPH_REPORT.md at session start still provides meaningful structural context for every query.
+**No PreToolUse hook on OpenClaw — session-start injection only.** The mid-session dynamic subgraph mechanism is a Claude Code / Codex feature. On OpenClaw, Graphify uses session-start injection via AGENTS.md exclusively. Agents work from a snapshot injected at session start rather than receiving focused subgraphs per query. This is a real capability gap vs Claude Code, but structural context at session start is still meaningfully better than no graph at all. The MCP server is available as an opt-in upgrade for sessions that need dynamic queries (see §3.2).
 
 **`graph.json` size.** Can grow on large codebases. Recommend committing `graph.json`, `GRAPH_REPORT.md`, and `obsidian/`. Gitignore `manifest.json`, `cost.json`, and optionally `cache/` (large, safe to regenerate).
 
