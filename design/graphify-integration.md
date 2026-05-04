@@ -1,6 +1,6 @@
 # Design: Graphify Integration into IDEA Platform
 
-**Status:** Proposal  
+**Status:** Draft — Implementation Plan Added  
 **Author:** Atlas  
 **Date:** 2026-05-03  
 **Related:** https://github.com/safishamsi/graphify  
@@ -279,35 +279,329 @@ This makes the graph pull deliberate and current, rather than relying on it bein
 
 ## 8. Implementation Plan
 
-### Phase 1 — Build and validate (one session, Koen or Atlas)
-1. On a dev machine with Python 3.10+: `pip install graphifyy`
-2. Clone `koenswings/idea` with all submodules
-3. Create `.graphifyignore` at root (see §3.1)
-4. Run `/graphify .` from idea root — inspect `GRAPH_REPORT.md` and `graph.html`
-5. If useful: commit `graphify-out/` to a branch, open PR for review
+> **Design principle:** Every change below is additive. Nothing existing is modified or deleted in Phase 1–3. Rollback at any phase leaves the platform in exactly the state it was before that phase. The fallback for each phase is listed explicitly.
 
-### Phase 2 — Agent integration (Atlas)
-1. `graphify claw install` — writes GRAPH_REPORT.md directive into AGENTS.md (do this in the idea root, covering all agents)
-2. Add explicit re-read instruction to each agent's AGENTS.md: read `graphify-out/GRAPH_REPORT.md` before starting cross-codebase tasks
-3. Remove or trim manually-maintained architecture sections from session-start context (ARCHITECTURE.md code sections, CONTEXT.md structural parts) — replaced by GRAPH_REPORT.md
-4. Test: Axle session asks about Console boundary without reading Console files → verify answer is grounded in graph
+---
+
+### Phase 1 — Build and validate the graph (off-Pi, no Pi changes)
+
+**Who:** Koen on his Mac (or Atlas can drive via shell if given access)  
+**Pi changes:** None  
+**Rollback:** Delete the local folder — nothing was committed  
+
+#### Steps
+
+```bash
+# 1. Install graphify on your Mac (Python 3.10+)
+pip install graphifyy
+
+# 2. Clone the idea repo with all submodules (if not already local)
+git clone --recurse-submodules https://github.com/koenswings/idea.git ~/idea-local
+cd ~/idea-local
+
+# 3. Create .graphifyignore at the repo root
+cat > .graphifyignore << 'EOF'
+# Agent memory/identity — sensitive, not useful for code nav
+agents/*/memory/
+agents/*/MEMORY.md
+agents/*/.git/
+
+# Build artifacts
+**/node_modules/
+**/dist/
+**/.next/
+**/target/
+
+# Graphify output (don't recurse into its own output)
+graphify-out/
+EOF
+
+# 4. Run the first build (inspect output before committing anything)
+/graphify .
+# This opens graph.html in browser automatically
+# GRAPH_REPORT.md and graph.json land in graphify-out/
+```
+
+**Gate:** Review `graph.html` and `GRAPH_REPORT.md`. If the graph looks wrong or useless, stop here — nothing has touched the Pi or any repo. If it's useful, proceed.
+
+```bash
+# 5. Add graphify-out/ to .gitignore EXCEPT the files we want to commit
+# (manifest.json, cost.json, cache/ are large/ephemeral — don't commit)
+cat >> .gitignore << 'EOF'
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/cache/
+EOF
+
+# 6. Commit .graphifyignore, updated .gitignore, and graphify-out/ to a branch
+git checkout -b feature/graphify-graph
+git add .graphifyignore .gitignore graphify-out/
+git commit -m "feat: add graphify knowledge graph"
+git push origin feature/graphify-graph
+# → Open PR for review. Merge when happy.
+```
+
+**What exists after Phase 1:**
+- `graphify-out/GRAPH_REPORT.md` — in repo, readable by agents
+- `graphify-out/graph.json` — in repo, machine-queryable
+- `graphify-out/graph.html` — in repo, visual viewer
+- `graphify-out/obsidian/` — in repo, Obsidian vault
+- `.graphifyignore` — in repo root
+- `graphify-out/manifest.json`, `cost.json`, `cache/` — gitignored
+
+---
+
+### Phase 2 — Agent integration (AGENTS.md changes only)
+
+**Who:** Atlas  
+**Pi changes:** One line added to each agent's `AGENTS.md`. No services. No system config.  
+**Rollback:** Remove the added lines from each AGENTS.md. Agents revert to not knowing about the graph — exactly current behaviour.
+
+#### What changes and where
+
+For **each agent** (`agents/agent-*/AGENTS.md`), add one instruction block. The exact wording:
+
+```markdown
+## Knowledge Graph
+
+Before starting any cross-codebase task (reading files in another agent's repo,
+reviewing a PR that spans Engine + Console, writing architecture docs), read:
+
+  /home/pi/idea/graphify-out/GRAPH_REPORT.md
+
+This gives you current structural context without reading raw source files.
+Do not read this file on every session start — only when doing cross-codebase work.
+```
+
+**Files modified:**
+- `agents/agent-operations-manager/AGENTS.md`
+- `agents/agent-engine-dev/AGENTS.md`
+- `agents/agent-console-dev/AGENTS.md`
+- `agents/agent-programme-manager/AGENTS.md`
+- `agents/agent-site-dev/AGENTS.md`
+
+Done via PR to each agent's repo (same pattern as any other AGENTS.md update).
+
+**What does NOT change:**
+- No systemd services
+- No `~/.openclaw/openclaw.json`
+- No Pi cron
+- No session-start injection (we're explicitly NOT running `graphify claw install`)
+- CONTEXT.md and ARCHITECTURE.md remain unchanged — we do NOT remove manually-maintained docs yet
+
+**Gate:** Run one test session with Axle. Ask about a Console concept without giving Console files. Does the answer reference the graph or read Console source cold? If the graph adds value, proceed. If not, remove the AGENTS.md line — zero other cleanup needed.
+
+---
 
 ### Phase 3 — Automation: GitHub Actions + Pi cron
-1. Add `.github/workflows/graphify.yml` to idea repo (see §5.1)
-2. Add `ANTHROPIC_API_KEY` to GitHub repo secrets
-3. Add cron entry on Pi: `*/30 * * * * cd /home/pi/idea && git pull --quiet`
-4. Add `graphify-out/manifest.json` and `graphify-out/cost.json` to `.gitignore`
 
-### Phase 4 — Mac access
-1. Add `graphify-serve.service` systemd unit on Pi (port 8083, serves `graphify-out/`)
-2. Enable and start: `systemctl --user enable --now graphify-serve`
-3. Koen pulls idea repo on Mac → opens `graphify-out/obsidian/` as Obsidian vault
-4. Verify both access points work over Tailscale
+**Who:** Atlas (GitHub Actions workflow) + root crontab on Pi (one new line)  
+**Pi changes:** One crontab entry for the `pi` user  
+**Rollback:** Remove the crontab entry. Remove the GitHub Actions workflow file via PR. Pi reverts to not auto-pulling; graph stays static (last committed version — still useful, just not auto-updating).
 
-### Phase 5 — Consolidation
-1. Monitor first few graph rebuilds via Actions logs
-2. Evaluate whether GRAPH_REPORT.md meaningfully reduces file-read calls in agent sessions
-3. Document refresh workflow in `PROCESS.md`
+#### 3a. GitHub Actions workflow
+
+New file: `idea/.github/workflows/graphify.yml`
+
+```yaml
+name: Rebuild knowledge graph
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'graphify-out/**'    # don't trigger on graph's own commits
+      - '**.md'              # optional: skip doc-only pushes to save API cost
+                             # remove this line to include doc changes
+jobs:
+  graphify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install graphifyy
+      - run: graphify . --update --no-viz
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Commit updated graph
+        run: |
+          git config user.name "graphify-bot"
+          git config user.email "graphify@idea"
+          git add graphify-out/
+          git diff --staged --quiet || git commit -m "chore: rebuild knowledge graph [skip ci]"
+          git push
+```
+
+**Required:** Add `ANTHROPIC_API_KEY` to the `idea` repo's GitHub secrets (Settings → Secrets → Actions).
+
+#### 3b. Pi cron entry (pi user)
+
+One line added to `pi` user's crontab:
+
+```
+# Pull updated graphify graph from idea repo every 30 minutes
+*/30 * * * * cd /home/pi/idea && git pull --quiet 2>/home/pi/idea/logs/graphify-pull.log
+```
+
+Add via: `crontab -e` as `pi` user.
+
+**What changes on the Pi (complete list for Phase 3):**
+
+| Item | Location | Change |
+|------|----------|--------|
+| Crontab entry | `pi` user crontab | +1 line |
+| Pull log | `/home/pi/idea/logs/graphify-pull.log` | New file (auto-created, append-only) |
+
+Nothing else. No new services. No new packages installed on the Pi. No config file changes. The `git pull` runs as the `pi` user under the existing `idea` directory — same as Koen would run manually.
+
+**Rollback Phase 3:**
+```bash
+# On Pi: remove the crontab line
+crontab -e  # delete the graphify-pull line
+
+# On GitHub: delete the workflow file via PR
+# Graph stays in repo at last committed state — not a problem
+```
+
+---
+
+### Phase 4 — Mac access (Pi HTTP service + Obsidian vault)
+
+**Who:** Atlas  
+**Pi changes:** One new systemd user service (`graphify-serve.service`)  
+**Rollback:** `systemctl --user disable --now graphify-serve` + delete the unit file. Port 8083 is released. Nothing else on the Pi changes.
+
+#### 4a. HTML viewer — systemd service on Pi
+
+New file: `/home/pi/.config/systemd/user/graphify-serve.service`
+
+```ini
+[Unit]
+Description=Graphify knowledge graph HTTP viewer
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m http.server 8083 --directory /home/pi/idea/graphify-out
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+# Enable and start
+systemctl --user daemon-reload
+systemctl --user enable --now graphify-serve
+
+# Verify
+curl -I http://localhost:8083/graph.html
+```
+
+Accessible from Mac over Tailscale at: **`http://idea.tail2d60.ts.net:8083/graph.html`**
+
+**Port conflict check:** Before deploying, confirm port 8083 is free:
+```bash
+ss -tlnp | grep 8083
+```
+If something is there, use 8084 or 8090 instead (update both the service file and the URL).
+
+#### 4b. Obsidian vault — Mac-side only
+
+No Pi changes. The vault is in `graphify-out/obsidian/` which is already in the repo (Phase 1). Koen:
+
+```bash
+# On Mac: clone or pull the idea repo
+git clone --recurse-submodules https://github.com/koenswings/idea.git ~/idea
+# or, if already cloned:
+cd ~/idea && git pull
+
+# Open Obsidian → "Open folder as vault" → select ~/idea/graphify-out/obsidian/
+```
+
+To refresh the vault after a graph rebuild: `git pull` in `~/idea` on Mac.
+
+**What changes on the Pi (complete list for Phase 4):**
+
+| Item | Location | Change |
+|------|----------|--------|
+| systemd unit | `/home/pi/.config/systemd/user/graphify-serve.service` | New file |
+| systemd symlink | Created by `systemctl enable` | Auto-created |
+| Open port | TCP 8083 | New |
+
+**Rollback Phase 4:**
+```bash
+systemctl --user disable --now graphify-serve
+rm ~/.config/systemd/user/graphify-serve.service
+systemctl --user daemon-reload
+```
+Port 8083 closes. Obsidian vault still works locally from the cloned repo — just no auto-sync.
+
+---
+
+### Phase 5 — Consolidation (optional, after 2–4 weeks)
+
+Only do this after the graph has proved its value in practice.
+
+1. **Trim ARCHITECTURE.md** — remove sections now covered better by the graph (code-level structure). Keep mission, principles, high-level component overview. PR to `idea` repo.
+2. **Document refresh workflow** in `PROCESS.md` — when to re-read GRAPH_REPORT.md, how to trigger a manual graph rebuild.
+3. **Evaluate** whether `graphify-out/cache/` is worth gitignoring on the runner (saves ~5–10 MB per commit but adds one rebuild pass on changed-file detection).
+4. **Review graph quality** — look at GRAPH_REPORT.md after 3–5 merges: are the god nodes sensible? Are the suggested questions relevant? If not, tune `.graphifyignore` to exclude noise.
+
+---
+
+### Full Pi change summary
+
+| Phase | Item | Location | Type | Rollback |
+|-------|------|----------|------|----------|
+| 1 | None | — | — | — |
+| 2 | AGENTS.md additions | Each agent repo | +text block per agent | Remove lines via PR |
+| 3 | Crontab entry | `pi` user crontab | +1 line | `crontab -e`, delete line |
+| 3 | Pull log | `/home/pi/idea/logs/graphify-pull.log` | New log file | `rm` the file |
+| 4 | systemd unit | `~/.config/systemd/user/graphify-serve.service` | New file | `systemctl disable --now` + `rm` |
+| 4 | TCP port 8083 | Network | Open port | Closed automatically when service is stopped |
+
+**No changes to:**
+- `~/.openclaw/openclaw.json`
+- Any existing systemd services (OpenClaw, MC Docker, etc.)
+- Any existing crontab entries
+- `/home/pi/idea/platform/` (MC Docker stack)
+- Python packages on the Pi (graphify builds and runs in GitHub Actions, not on the Pi)
+- Tailscale config
+- Git repo structure of any existing repos
+
+### Fallback to current working state (complete removal)
+
+If graphify is removed entirely after all 4 phases:
+
+```bash
+# Pi: remove crontab line
+crontab -e  # delete the graphify line
+
+# Pi: remove HTTP service
+systemctl --user disable --now graphify-serve
+rm ~/.config/systemd/user/graphify-serve.service
+systemctl --user daemon-reload
+
+# Pi: remove pull log (optional)
+rm /home/pi/idea/logs/graphify-pull.log
+
+# GitHub: remove Actions workflow
+# → delete .github/workflows/graphify.yml via PR
+
+# GitHub: remove graphify-out/ from idea repo
+# → delete graphify-out/ and .graphifyignore via PR
+
+# Agent repos: remove AGENTS.md additions
+# → one-line PR to each agent repo
+```
+
+After removal: all agents revert to exactly current behaviour. No data is lost — CONTEXT.md and ARCHITECTURE.md were never removed (Phase 5 trim is optional and reversible via git history). Sessions resume as if graphify never existed.
 
 ---
 
