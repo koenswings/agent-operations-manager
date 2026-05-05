@@ -272,18 +272,7 @@ Lag between a merge landing on GitHub and the Pi having the updated graph: up to
 
 This is where an important constraint applies: **OpenClaw sessions are long-running.** After disabling the nightly reboot, sessions can run for days or weeks. GRAPH_REPORT.md is injected at session start — meaning a long-running session will work from a snapshot that may be many merged PRs out of date.
 
-Session-start injection is therefore not sufficient on its own. The complementary mechanism is: **agents explicitly re-read GRAPH_REPORT.md at the start of significant work tasks.**
-
-This should be a standing instruction in each agent's AGENTS.md:
-
-```
-Before starting any cross-codebase task, read:
-  /home/pi/graphify-cache/graphify-out/GRAPH_REPORT.md
-This is the current knowledge graph of the full IDEA platform.
-Do not read this on every session start — only before cross-codebase work.
-```
-
-This makes the graph pull deliberate and current, rather than relying on it being fresh from session start.
+Agents read GRAPH_REPORT.md at every session start (see Phase 2). Since sessions can run for days or weeks, the graph snapshot may be many merged PRs out of date. The cron pull (every 30 min) ensures the file on disk is always current, so the next session start gets a fresh graph. For long-running sessions doing significant cross-codebase work, agents can explicitly re-read the file mid-session to refresh their context.
 
 ---
 
@@ -308,7 +297,7 @@ This makes the graph pull deliberate and current, rather than relying on it bein
 
 **Graph currency in long-running sessions.** Sessions can run for days or weeks without restarting. Session-start injection of GRAPH_REPORT.md is stale for any session that started before the last merge. Mitigated by agents explicitly re-reading the file at task start (see §5.3). The graph is structural context, not ground truth — agents should verify against source for critical decisions.
 
-**Build should run on a dev machine or CI, not the Pi.** The Python extraction CLI is compute-light but shouldn't run on the Pi during active sessions. Best practice: run `/graphify .` on a dev machine after significant changes, commit the output, let the Pi pull it. The git hook can also run on the dev machine.
+**Build should run on a fleet Pi or CI, not the main Pi.** The Python extraction CLI is compute-light but shouldn't run on the main Pi (`openclaw-pi`) during active sessions — it competes for RAM and API budget with the five OpenClaw agents. Best practice: run `/graphify <path> --obsidian` (as an AI-orchestrated skill) on a fleet Pi (idea01/idea02/idea03), commit the output, let the main Pi pull it. GitHub Actions (Phase 3) is the permanent trigger; fleet Pi is for manual/initial builds.
 
 **Tool maturity.** Graphify launched April 3, 2026 — approximately 4 weeks old at time of writing. ~130 commits, API and output formats may still shift. Not a battle-tested tool for mission-critical pipelines. MIT license, active development. Treat as a pilot, not a permanent dependency until it stabilises.
 
@@ -326,19 +315,24 @@ This makes the graph pull deliberate and current, rather than relying on it bein
 
 ---
 
-### Phase 1 — Build and validate the graph (off-Pi, no Pi changes)
+### Phase 1 — Build and validate the graph (on a fleet Pi)
 
-**Who:** Koen on his Mac (or Atlas can drive via shell if given access)  
-**Pi changes:** None  
-**Rollback:** Delete the local folder — nothing was committed  
+**Who:** Atlas, driving a fleet Pi (idea01/idea02/idea03) via SSH  
+**Pi changes:** Temporary clone + venv on the fleet Pi only. The main Pi (`openclaw-pi`) is never involved in the build.  
+**Rollback:** `rm -rf ~/idea-local ~/graphify-env` on the fleet Pi — nothing was committed
+
+> **Why a fleet Pi and not the Mac?** Atlas has SSH access to the fleet Pis but no direct shell on Koen's Mac. The fleet Pis are not running anything essential and have ample disk (200 GB free on idea01). `graph.html` is served over Tailscale for Koen to review in-browser, and `graphify-out/` is committed back to the repo for the Obsidian vault.
+
+> **Why not the main Pi (`openclaw-pi`)?** The main Pi runs all five OpenClaw agents. The graphify build (Pass 3 LLM extraction) competes for RAM and API budget while agents are active. Fleet Pis are the correct build environment.
 
 #### Steps
 
 ```bash
-# 1. Install graphify on your Mac (Python 3.10+)
-pip install graphifyy
+# 1. Create a Python venv and install graphify (done once per Pi)
+python3 -m venv ~/graphify-env
+~/graphify-env/bin/pip install graphifyy
 
-# 2. Clone the idea repo with all submodules (if not already local)
+# 2. Clone the idea repo with all submodules
 git clone --recurse-submodules https://github.com/koenswings/idea.git ~/idea-local
 cd ~/idea-local
 
@@ -359,13 +353,15 @@ agents/*/.git/
 graphify-out/
 EOF
 
-# 4. Run the first build (inspect output before committing anything)
-/graphify .
-# This opens graph.html in browser automatically
-# GRAPH_REPORT.md and graph.json land in graphify-out/
+# 4. Run the first build
+# NOTE: /graphify is an AI skill, not a standalone CLI command.
+# Atlas runs the build by invoking the graphify skill steps directly via shell on idea01.
+# The CLI tools (graphify detect, graphify path, etc.) are helpers; the orchestration is done by the agent.
+# This step is therefore: "Atlas, run /graphify <path> --obsidian on idea01"
+# Outputs: GRAPH_REPORT.md, graph.json, graph.html, and obsidian/ in graphify-out/
 ```
 
-**Gate:** Review `graph.html` and `GRAPH_REPORT.md`. If the graph looks wrong or useless, stop here — nothing has touched the Pi or any repo. If it's useful, proceed.
+**Gate:** Inspect `GRAPH_REPORT.md` on disk; review `graph.html` via the Phase 4 HTTP service (or copy to Mac). If the graph looks wrong or useless, stop here — nothing has touched the main Pi or any repo. If it's useful, proceed.
 
 ```bash
 # 5. Add graphify-out/ to .gitignore EXCEPT the files we want to commit
@@ -407,13 +403,12 @@ For **each agent** (`agents/agent-*/AGENTS.md`), add one instruction block. The 
 ```markdown
 ## Knowledge Graph
 
-Before starting any cross-codebase task (reading files in another agent's repo,
-reviewing a PR that spans Engine + Console, writing architecture docs), read:
+At every session start, read:
 
   /home/pi/idea/graphify-out/GRAPH_REPORT.md
 
-This gives you current structural context without reading raw source files.
-Do not read this file on every session start — only when doing cross-codebase work.
+This is the knowledge graph of the full IDEA platform. It gives you structural context
+across all repos, agents, and design docs before you do any work.
 ```
 
 **Files modified:**
@@ -432,7 +427,7 @@ Done via PR to each agent's repo (same pattern as any other AGENTS.md update).
 - No session-start injection (we're explicitly NOT running `graphify claw install`)
 - CONTEXT.md and ARCHITECTURE.md remain unchanged — we do NOT remove manually-maintained docs yet
 
-**Gate:** Run one test session with Axle. Ask about a Console concept without giving Console files. Does the answer reference the graph or read Console source cold? If the graph adds value, proceed. If not, remove the AGENTS.md line — zero other cleanup needed.
+**Gate:** Run one test session with Axle. Does the agent read the graph at session start and use it to answer architecture questions without reading raw source files cold? If the graph adds value, proceed. If not, remove the AGENTS.md section — zero other cleanup needed.
 
 ---
 
