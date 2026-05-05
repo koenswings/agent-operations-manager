@@ -824,3 +824,213 @@ The highest-priority item — by significant margin — is the missing
 MC database backup. Everything else is either intentional or low
 risk. The DB backup should be added to `setup.sh` and the nightly
 cron before any further MC integration work.
+
+---
+
+## Part 6 — PR-Less Workflow + Graphify Integration
+
+**Status:** Design proposal — not yet implemented
+
+---
+
+### 6.1 The PR-less workflow
+
+The current workflow bundles two concerns:
+
+1. **Code isolation** — agent works on a branch, doesn't break main
+2. **Coordination signal** — "this work is done, review it"
+
+The PR-as-gate creates a timing problem: when Koen merges, nothing notifies other agents that main changed. Each agent's view of the codebase silently drifts from reality until its next session start.
+
+The PR-less workflow separates these two concerns. GitHub branches remain (code isolation, diff view). GitHub PRs as a manual review step are removed. MC becomes the review gate.
+
+**The flow:**
+
+```
+Agent completes work on a branch
+  → Posts branch name + summary as MC task comment
+  → Moves task to Review
+
+Koen reviews in MC
+  → Reads the task comment thread for context
+  → Optionally checks the GitHub compare view for the diff:
+    github.com/koenswings/<repo>/compare/main...<branch>
+  → Approves the MC task (MC approval record created)
+
+Atlas sees task approval
+  → Calls: git merge <branch> && git push origin main
+    (directly on the Pi — no GitHub PR UI involved)
+  → Posts confirmation as MC task comment
+  → Moves task to Done
+
+Main advances on GitHub
+  → GitHub Actions fires on push to main
+  → Agents receive sync nudge (see §6.3)
+  → Knowledge graph rebuilds (see §6.2)
+```
+
+**What you gain:**
+- No PR ceremony — no "open PR, wait, review, merge, close" cycle
+- MC task IS the review unit — context lives in the task thread, not scattered across PR comments
+- Every merge triggers an automatic sync event — the timing problem disappears
+- The audit trail shifts from GitHub PR history to MC task history (structured, queryable)
+
+**What you lose:**
+- GitHub inline review comments tied to specific lines of code
+- CI on PR (though GitHub Actions on push to main provides equivalent coverage)
+- The GitHub PR as the permanent diff record (the branch + commit history remains, but no PR summary)
+
+**The key question:** Are you doing line-by-line reviews, or reviewing at the "does this task do what I asked?" level? For AI-generated code with a well-specified task, the latter is usually sufficient. The GitHub compare view is available on demand without needing a PR to exist.
+
+---
+
+### 6.2 Graphify integration in the PR-less workflow
+
+Graphify's knowledge graph rebuilds whenever `graphify-out/` is stale relative to the codebase. In the current workflow, this is a separate manual step. In the PR-less workflow, it becomes automatic and zero-effort.
+
+**Trigger: push to main**
+
+When Atlas merges a branch and pushes to `main`, GitHub Actions fires. The graphify workflow (Phase 3 of the graphify design doc) runs in an isolated Ubuntu VM:
+
+```yaml
+# idea/.github/workflows/graphify.yml
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'graphify-out/**'   # don't trigger on graph's own commits
+jobs:
+  graphify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install graphifyy
+      - run: graphify . --obsidian --no-viz   # Atlas runs the skill steps
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Commit updated graph
+        run: |
+          git config user.name "graphify-bot"
+          git config user.email "graphify@idea"
+          git add graphify-out/
+          git diff --staged --quiet || git commit -m "chore: rebuild knowledge graph [skip ci]"
+          git push
+```
+
+The VM builds the graph, commits the updated `graphify-out/` back to main, and is destroyed. The Pi is never involved in the build.
+
+**Pi pull: sparse clone cron**
+
+A dedicated sparse clone at `/home/pi/graphify-cache` tracks only `graphify-out/` and is updated every 30 minutes:
+
+```bash
+# One-time setup:
+git clone --no-checkout --depth 1 --filter=blob:none \
+  https://github.com/koenswings/idea.git /home/pi/graphify-cache
+cd /home/pi/graphify-cache
+git sparse-checkout set graphify-out/
+git checkout main
+
+# Pi crontab (pi user):
+*/30 * * * * cd /home/pi/graphify-cache && git pull --quiet 2>>/home/pi/idea/logs/graphify-pull.log
+```
+
+This path is never touched by agent work — no conflict risk. Up to 30 minutes of lag between a merge landing and the Pi having the updated graph. Acceptable for structural context.
+
+**The complete merge-to-graph pipeline:**
+
+```
+Atlas merges branch → push to main
+  → GitHub Actions: graphify rebuilds (Azure VM, ~2-5 min)
+  → graphify-bot commits graphify-out/ to main
+  → Pi cron pulls (within 30 min)
+  → /home/pi/graphify-cache/graphify-out/GRAPH_REPORT.md updated
+  → Next agent session start reads fresh graph
+```
+
+For code-only merges (TypeScript changes, no doc changes), graphify's AST rebuild is fast and free — no LLM API cost. Only changed markdown/docs trigger the LLM extraction pass, and only for the changed files (SHA256 cache).
+
+---
+
+### 6.3 Sync nudge: agents notified on merge
+
+When Atlas merges a branch and pushes to main, it immediately nudges agents whose repos were affected:
+
+```
+Atlas: git merge <branch> && git push origin main
+  → Identifies which agent repo changed
+  → Sends nudge via MC Gateways API to that agent's session:
+    "main updated: <commit summary>. Pull before starting next task."
+  → Optionally nudges cross-dependent agents
+    (e.g. Engine merge → nudge Pixel; Console merge → nudge Axle)
+```
+
+This is the missing event bus that makes the sync problem disappear. Instead of agents discovering drift at session start hours later, they're told immediately. The nudge is lightweight — it doesn't interrupt ongoing work, just queues a note for the next time the agent acts.
+
+**Cross-repo dependencies worth nudging:**
+
+| Repo merged | Agents to nudge |
+|-------------|----------------|
+| `agent-engine-dev` | Pixel (Console dev depends on Engine API) |
+| `agent-console-dev` | Axle (Engine may need to match Console changes) |
+| `idea` (org root) | All agents (CONTEXT.md, PROCESS.md, BACKLOG.md) |
+| `agent-operations-manager` | All agents (design docs, AGENTS.md changes) |
+
+---
+
+### 6.4 What Atlas does in this model
+
+Atlas gains a new operational role: **merge executor**. When a task moves to Approved in MC, Atlas:
+
+1. Reads the task comment for the branch name
+2. Verifies the branch exists and is clean (fast-forward to main)
+3. Executes the merge and push
+4. Posts confirmation to the task comment thread
+5. Moves the task to Done
+6. Sends sync nudges to affected agents
+
+This requires Atlas to:
+- Monitor MC for task approval events (heartbeat or webhook)
+- Have push access to all agent repos (currently true — it has the Pi's SSH key)
+- Execute git operations on the Pi host (currently true — not sandboxed)
+
+No new infrastructure required. This is Atlas's existing capabilities pointed at a new trigger.
+
+---
+
+### 6.5 Implementation sequence
+
+This is a three-step rollout, each independently valuable:
+
+**Step 1 — GitHub Actions graphify rebuild (Phase 3 of graphify design doc)**
+Add `.github/workflows/graphify.yml` to the `idea` repo. Add `ANTHROPIC_API_KEY` to GitHub secrets. Set up the Pi sparse clone and cron. Graph auto-updates on every merge to main.
+
+*Prerequisite: none. Can ship now.*
+
+**Step 2 — Sync nudge**
+Atlas posts a nudge to affected agent sessions whenever it observes a push to main (via MC webhook or cron check on git log). Agents are immediately informed when the codebase they depend on changes.
+
+*Prerequisite: MC Gateways API session IDs are stable and correct (confirmed 2026-04-11).*
+
+**Step 3 — PR-less merge flow (Atlas as merge executor)**
+Atlas monitors MC for task approvals, executes merges, and posts confirmations. This replaces the GitHub PR merge step as the CEO action required to ship code.
+
+*Prerequisite: Steps 1 and 2 working. Koen comfortable with Atlas executing merges on approval signal.*
+
+---
+
+### 6.6 What stays the same
+
+- GitHub branches for all agent work — code isolation unchanged
+- The GitHub compare view is available on demand for diff review
+- CI runs on push to main (GitHub Actions) — same or better coverage than PR CI
+- The CEO approval gate is preserved — Atlas only merges on explicit MC approval
+- `BACKLOG.md` and session-start reads unchanged
+- Telegram for real-time conversation and direction
+- MC for task state, comments, and approval records
